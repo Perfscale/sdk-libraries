@@ -1,0 +1,14 @@
+# Local e2e for the example component:
+#   perfscale run -f examples/hello/hello.test.yaml -c examples/hello/hello.config.yaml
+# jco (StarlingMonkey) components always import wasi:filesystem/* and
+# wasi:clocks/wall-clock — a single `fs` grant satisfies both under the
+# engine's capability model (read-only preopen of the run's fs_root).
+libraries:
+  - use: ./hello.wasm
+    capabilities: [fs]
+steps:
+  - name: greet
+    use: std/file-write@v1
+    with:
+      path: hello-out.txt
+      content: "greeting: ${hello.greet(world)}; token: ${hello.token(order)}; again: ${hello.token(order)}"

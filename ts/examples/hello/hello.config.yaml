@@ -1,0 +1,5 @@
+vus: 1
+duration: 1s
+allow_file_actions: true
+allow_library_capabilities: true
+seed: 42

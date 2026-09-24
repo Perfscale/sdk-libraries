@@ -1,0 +1,49 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ts/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run example:build
+      - name: Checksums
+        working-directory: ts/examples/hello
+        run: shasum -a 256 hello.wasm > hello.wasm.sha256
+      - name: Attach the example component to the GitHub release
+        working-directory: ts/examples/hello
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            hello.wasm hello.wasm.sha256 \
+          || gh release upload "$GITHUB_REF_NAME" --clobber hello.wasm hello.wasm.sha256
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Publishing @perfscale/library-sdk to npm is intentionally NOT wired
+      # up yet: it needs an `NPM_TOKEN` repo secret (granular access token
+      # for the @perfscale scope). Once the secret exists, uncomment:
+      #
+      # - name: Publish @perfscale/library-sdk to npm
+      #   run: npm publish --access public
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

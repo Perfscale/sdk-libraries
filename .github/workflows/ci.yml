@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ts/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Componentize the example library
+        run: npm run example:build
+      - name: Inspect component imports/exports
+        run: npx jco wit examples/hello/hello.wasm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hello-wasm
+          path: ts/examples/hello/hello.wasm
+          retention-days: 7
+
+  integration:
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: hello-wasm
+          path: ts/examples/hello/
+      - name: Download perfscale v0.21.0 (linux-amd64)
+        run: |
+          curl -fsSL -o perfscale \
+            https://github.com/Perfscale/perfscale/releases/download/v0.21.0/perfscale-linux-amd64
+          chmod +x perfscale
+          curl -fsSL https://github.com/Perfscale/perfscale/releases/download/v0.21.0/sha256sums.txt \
+            | grep linux-amd64 | sha256sum -c --ignore-missing
+          ./perfscale --version
+      - name: Run the example through the engine
+        working-directory: ts/examples/hello
+        run: "$OLDPWD/perfscale run -f hello.test.yaml -c hello.config.yaml"
+      - name: Assert token expansion
+        working-directory: ts/examples/hello
+        run: |
+          cat hello-out.txt
+          grep -q 'greeting: hello, world!' hello-out.txt
