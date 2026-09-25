@@ -51,7 +51,7 @@ jobs:
           ./perfscale --version
       - name: Run the example through the engine
         working-directory: ts/examples/hello
-        run: "$OLDPWD/perfscale run -f hello.test.yaml -c hello.config.yaml"
+        run: "$GITHUB_WORKSPACE/perfscale run -f hello.test.yaml -c hello.config.yaml"
       - name: Assert token expansion
         working-directory: ts/examples/hello
         run: |
