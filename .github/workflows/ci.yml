@@ -42,11 +42,12 @@ jobs:
           path: ts/examples/hello/
       - name: Download perfscale v0.21.0 (linux-amd64)
         run: |
-          curl -fsSL -o perfscale \
+          curl -fsSL -o perfscale-linux-amd64 \
             https://github.com/Perfscale/perfscale/releases/download/v0.21.0/perfscale-linux-amd64
-          chmod +x perfscale
           curl -fsSL https://github.com/Perfscale/perfscale/releases/download/v0.21.0/sha256sums.txt \
             | grep linux-amd64 | sha256sum -c --ignore-missing
+          mv perfscale-linux-amd64 perfscale
+          chmod +x perfscale
           ./perfscale --version
       - name: Run the example through the engine
         working-directory: ts/examples/hello
