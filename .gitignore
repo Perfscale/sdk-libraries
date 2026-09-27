@@ -4,3 +4,4 @@ dist/
 !**/wit/**
 hello-out.txt
 .DS_Store
+*.tgz

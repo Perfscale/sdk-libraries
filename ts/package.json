@@ -1,6 +1,6 @@
 {
   "name": "@perfscale/library-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript/JavaScript SDK for authoring perfscale WASM value-generator libraries (RFC 005)",
   "license": "(MIT OR Apache-2.0)",
   "type": "module",
@@ -26,9 +26,11 @@
     "test": "node --test 'test/*.test.ts'",
     "example:build": "node bin/perfscale-library-build.mjs examples/hello/hello.ts -o examples/hello/hello.wasm"
   },
-  "devDependencies": {
+  "dependencies": {
     "@bytecodealliance/jco": "^1.35.0",
-    "@bytecodealliance/preview2-shim": "^0.25.0",
+    "@bytecodealliance/preview2-shim": "^0.25.0"
+  },
+  "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0"
   }

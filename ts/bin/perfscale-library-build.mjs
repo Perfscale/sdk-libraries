@@ -18,7 +18,8 @@
 // enabled — the engine connects wasi:cli/* in sink form.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,8 +66,19 @@ if (!existsSync(path.join(witDir, "library.wit"))) {
   process.exit(1);
 }
 
-jcoBin ??= path.join(sdkRoot, "node_modules", ".bin", "jco");
-if (!existsSync(jcoBin)) jcoBin = "jco"; // fall back to PATH
+jcoBin ??= (() => {
+  // jco is a runtime dependency of this package — resolve it through Node's
+  // module resolution (createRequire walks up from this file), so repo
+  // checkouts, hoisted consumer installs, and nested layouts all work.
+  try {
+    const req = createRequire(import.meta.url);
+    const pkgJson = req.resolve("@bytecodealliance/jco/package.json");
+    const binRel = JSON.parse(readFileSync(pkgJson, "utf8")).bin.jco;
+    return path.join(path.dirname(pkgJson), binRel);
+  } catch {
+    return "jco"; // last resort: PATH
+  }
+})();
 
 const entryAbs = path.resolve(entry);
 const fallbackName = path.basename(entryAbs).replace(/\.[^.]+$/, "");
