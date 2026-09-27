@@ -13,9 +13,12 @@ jobs:
     defaults:
       run:
         working-directory: ts
+    permissions:
+      contents: write # GitHub release with the example component
+      id-token: write # npm provenance attestation (and trusted publishing)
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -40,10 +43,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      # Publishes @perfscale/library-sdk to npm. Auth: NPM_TOKEN repo secret
-      # (granular access token for the @perfscale scope), picked up via the
-      # setup-node registry-url above. Scoped packages need --access public.
+      # Publishes @perfscale/library-sdk to npm with a provenance attestation
+      # (sigstore bundle linked from the package page). Auth: NPM_TOKEN repo
+      # secret via the setup-node registry-url above. Trusted-publishing path,
+      # once the publisher is bound on npmjs.com (package settings → Trusted
+      # Publisher → GitHub Actions: Perfscale/sdk-libraries, workflow
+      # release.yml): drop NODE_AUTH_TOKEN and the secret entirely — npm then
+      # authenticates this workflow by its OIDC token. Requires npm ≥ 11.5.1.
       - name: Publish @perfscale/library-sdk to npm
-        run: npm publish --access public
+        run: |
+          npm install -g npm@latest
+          npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
