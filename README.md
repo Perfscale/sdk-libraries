@@ -97,6 +97,27 @@ The SDK also gives you:
   `ts/scripts/sync-wit.sh` re-fetches it pinned to a perfscale release tag
   (bump `PERFSCALE_TAG` deliberately).
 
+## Docker
+
+**Authoring (TS/JS)** — a hermetic toolchain image, no host Node required:
+
+```console
+$ docker build -t perfscale-library-build ts/docker
+$ docker run --rm -v "$PWD:/src" -w /src perfscale-library-build mylib.ts -o mylib.wasm
+```
+
+The image is Node 24 + the published `@perfscale/library-sdk` (jco included);
+pin the SDK with `--build-arg SDK_VERSION=0.1.2` (`ts/docker/Dockerfile`).
+
+**Rust** — the SDK lives in the engine repo; any `rust:1.x` image with
+`wasm32-wasip2` added (`rustup target add wasm32-wasip2`) builds components
+with plain cargo. **Go** — the `tinygo/tinygo` image matches the recipe in
+`go/README.md`.
+
+**Running** libraries in Docker (engine images, mount layout, the install
+cache, and burned standalone binaries) is covered in the engine's
+[Docker guide](https://github.com/Perfscale/perfscale/blob/main/docs/core/docker.md#wasm-libraries).
+
 ## Layout
 
 ```

@@ -19,7 +19,6 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,19 +65,33 @@ if (!existsSync(path.join(witDir, "library.wit"))) {
   process.exit(1);
 }
 
-jcoBin ??= (() => {
-  // jco is a runtime dependency of this package — resolve it through Node's
-  // module resolution (createRequire walks up from this file), so repo
-  // checkouts, hoisted consumer installs, and nested layouts all work.
-  try {
-    const req = createRequire(import.meta.url);
-    const pkgJson = req.resolve("@bytecodealliance/jco/package.json");
-    const binRel = JSON.parse(readFileSync(pkgJson, "utf8")).bin.jco;
-    return path.join(path.dirname(pkgJson), binRel);
-  } catch {
-    return "jco"; // last resort: PATH
+/// Find jco's bin by walking up from this file: jco is a runtime dependency
+/// of this package, so it lives in some `node_modules/@bytecodealliance/jco`
+/// above us — nested under the package, hoisted to the consumer's root, or
+/// beside us in a global install. (require.resolve is unusable here: jco's
+/// exports map does not expose its package.json.)
+function resolveJcoBin() {
+  let dir = here;
+  for (;;) {
+    const pkgDir = path.join(dir, "node_modules", "@bytecodealliance", "jco");
+    const pkgJson = path.join(pkgDir, "package.json");
+    if (existsSync(pkgJson)) {
+      const binRel = JSON.parse(readFileSync(pkgJson, "utf8")).bin.jco;
+      return path.join(pkgDir, binRel);
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
   }
-})();
+}
+
+jcoBin ??= resolveJcoBin();
+if (!jcoBin) {
+  console.error(
+    "error: @bytecodealliance/jco not found next to this package — reinstall @perfscale/library-sdk (jco is a bundled dependency)",
+  );
+  process.exit(1);
+}
 
 const entryAbs = path.resolve(entry);
 const fallbackName = path.basename(entryAbs).replace(/\.[^.]+$/, "");
@@ -107,7 +120,9 @@ const cmd = [
   path.resolve(out),
   ...disable.flatMap((f) => ["--disable", f]),
 ];
-const res = spawnSync(jcoBin, cmd, { stdio: "inherit" });
+// Run jco through the current node binary: no reliance on the npm bin shim,
+// the shebang, or an executable bit.
+const res = spawnSync(process.execPath, [jcoBin, ...cmd], { stdio: "inherit" });
 if (res.error) {
   console.error(`error: failed to run jco (${jcoBin}): ${res.error.message}`);
   process.exit(1);
