@@ -3,6 +3,11 @@
   "version": "0.1.1",
   "description": "TypeScript/JavaScript SDK for authoring perfscale WASM value-generator libraries (RFC 005)",
   "license": "(MIT OR Apache-2.0)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Perfscale/sdk-libraries.git",
+    "directory": "ts"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
