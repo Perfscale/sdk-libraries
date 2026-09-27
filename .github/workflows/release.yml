@@ -43,16 +43,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      # Publishes @perfscale/library-sdk to npm with a provenance attestation
-      # (sigstore bundle linked from the package page). Auth: NPM_TOKEN repo
-      # secret via the setup-node registry-url above. Trusted-publishing path,
-      # once the publisher is bound on npmjs.com (package settings → Trusted
-      # Publisher → GitHub Actions: Perfscale/sdk-libraries, workflow
-      # release.yml): drop NODE_AUTH_TOKEN and the secret entirely — npm then
-      # authenticates this workflow by its OIDC token. Requires npm ≥ 11.5.1.
+      # Publishes @perfscale/library-sdk to npm via trusted publishing: the
+      # workflow authenticates with its OIDC token (no long-lived npm token
+      # anywhere) and the package carries a provenance attestation. The
+      # binding lives on npmjs.com → package settings → Trusted Publisher →
+      # GitHub Actions: Perfscale/sdk-libraries, workflow release.yml.
+      # Requires npm ≥ 11.5.1 (hence the npm@latest upgrade).
       - name: Publish @perfscale/library-sdk to npm
         run: |
           npm install -g npm@latest
           npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
