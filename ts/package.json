@@ -35,6 +35,11 @@
     "@bytecodealliance/jco": "^1.35.0",
     "@bytecodealliance/preview2-shim": "^0.25.0"
   },
+  "overrides": {
+    "@bytecodealliance/jco": {
+      "@bytecodealliance/componentize-js": "^0.23.0"
+    }
+  },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0"
