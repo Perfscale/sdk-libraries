@@ -12,10 +12,13 @@
 // capability model: `wasi:random` is never provided to guests (draw from
 // `ctx.rng()` instead), and `fetch`/timers would trap anyway. StarlingMonkey
 // still always imports `wasi:filesystem/*` and `wasi:clocks/wall-clock` (its
-// base engine links them unconditionally), so the YAML `libraries:` entry
-// needs `capabilities: [fs]` (one `fs` grant also satisfies the wall clock)
-// plus `allow_library_capabilities: true` in the config. stdio stays
-// enabled — the engine connects wasi:cli/* in sink form.
+// base engine links them unconditionally), but those are toolchain noise: the
+// SDK reports `"pure": true` in `info()` (no fs/clock APIs are exposed to
+// authors), so engines honoring the pure marker waive the `capabilities:
+// [fs]` grant — provide no preopens. Engines older than the pure-marker
+// release still require `capabilities: [fs]` plus
+// `allow_library_capabilities: true` (fail-closed). stdio stays enabled —
+// the engine connects wasi:cli/* in sink form.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";

@@ -6,8 +6,7 @@ value-generating functions to `${alias.fn(...)}` tokens in
 
 ```yaml
 libraries:
-  - use: ./hello.wasm
-    capabilities: [fs]
+  - use: ./hello.wasm   # pure component — no capabilities grant needed
 steps:
   - use: std/file-write@v1
     with:
@@ -25,7 +24,7 @@ single source of truth.
 | Language | Status | Where |
 |---|---|---|
 | **TypeScript / JavaScript** | SDK + build tooling | [`ts/`](ts) (`@perfscale/library-sdk`) |
-| **Go** | Documented recipe (experimental, no SDK yet) | [`go/README.md`](go/README.md) |
+| **Go** | Example component (TinyGo + wit-bindgen-go, no SDK yet) | [`go/examples/hello`](go/examples/hello) |
 | **Rust** | Full SDK, lives in the main repo | [`crates/perfscale-library-sdk`](https://github.com/Perfscale/perfscale/tree/main/crates/perfscale-library-sdk) |
 
 ## TypeScript quickstart
@@ -87,12 +86,16 @@ The SDK also gives you:
 ### Sandboxing notes for TS authors
 
 - jco (StarlingMonkey) components always import `wasi:filesystem/*` and
-  `wasi:clocks/wall-clock`; declare `capabilities: [fs]` on the
-  `libraries:` entry (one `fs` grant satisfies both — a read-only preopen of
-  the run's `fs_root`) and set `allow_library_capabilities: true` in the
-  config. The build already disables `wasi:random`, `wasi:http` and timers,
-  which the engine never grants — draw all randomness from `ctx.rng()` and
-  all time from `ctx.timeMs`.
+  `wasi:clocks/wall-clock`, but that is toolchain noise: the SDK reports
+  `"pure": true` in `info()` (it exposes no fs/clock APIs to authors), so
+  engines honoring the pure marker waive the capability requirement and
+  provide no preopens — no `capabilities:` grant is needed. On engines older
+  than the pure-marker release the grant is still required
+  (`capabilities: [fs]` on the `libraries:` entry, one `fs` grant satisfies
+  both imports, plus `allow_library_capabilities: true` in the config) —
+  old engines fail closed. The build already disables `wasi:random`,
+  `wasi:http` and timers, which the engine never grants — draw all
+  randomness from `ctx.rng()` and all time from `ctx.timeMs`.
 - The WIT contract is vendored at `ts/wit/library.wit`;
   `ts/scripts/sync-wit.sh` re-fetches it pinned to a perfscale release tag
   (bump `PERFSCALE_TAG` deliberately).
@@ -107,7 +110,7 @@ $ docker run --rm -v "$PWD:/src" -w /src perfscale-library-build mylib.ts -o myl
 ```
 
 The image is Node 24 + the published `@perfscale/library-sdk` (jco included);
-pin the SDK with `--build-arg SDK_VERSION=0.1.2` (`ts/docker/Dockerfile`).
+pin the SDK with `--build-arg SDK_VERSION=0.1.3` (`ts/docker/Dockerfile`).
 
 **Rust** — the SDK lives in the engine repo; any `rust:1.x` image with
 `wasm32-wasip2` added (`rustup target add wasm32-wasip2`) builds components
@@ -123,7 +126,8 @@ cache, and burned standalone binaries) is covered in the engine's
 ```
 ts/            @perfscale/library-sdk — defineLibrary, Ctx, Prng, testCall,
                perfscale-library-build (jco componentize glue), example
-go/README.md   Go recipe (TinyGo + wasip2 + wit-bindgen-go), experimental
+go/            Go guidance (README) + examples/hello — a working TinyGo
+               example component with committed wit-bindgen-go bindings
 ```
 
 ## License

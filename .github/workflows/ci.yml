@@ -38,6 +38,46 @@ jobs:
           path: ts/examples/hello/hello.wasm
           retention-days: 7
 
+  go-example:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go/examples/hello
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.24"
+      - uses: acifani/setup-tinygo@f51bf108c9895381060398804ce6cf6f62692106 # v3
+        with:
+          tinygo-version: "0.42.0"
+      - name: Install wasm-tools and binaryen (pinned)
+        run: |
+          set -eu
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://github.com/bytecodealliance/wasm-tools/releases/download/v1.261.0/wasm-tools-1.261.0-x86_64-linux.tar.gz \
+            | tar -xz --strip-components=1 -C "$HOME/.local/bin" --wildcards '*/wasm-tools'
+          curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz \
+            | tar -xz --strip-components=2 -C "$HOME/.local/bin" --wildcards '*/bin/wasm-opt'
+          wasm-tools --version && wasm-opt --version
+      # Bindings under internal/gen are committed — no codegen here.
+      - run: go build ./...
+      - name: Componentize the Go example library
+        # build.sh re-worlds the component to perfscale:library/library and
+        # strips the wasi:random imports TinyGo's runtime links — see
+        # go/README.md ("Building") for why plain tinygo build is not enough.
+        run: ./build.sh
+      - name: Assert component shape (export + no wasi:random)
+        run: |
+          wasm-tools component wit hello.wasm | grep -q 'export perfscale:library/library@0.1.0'
+          ! wasm-tools component wit hello.wasm | grep -q 'wasi:random'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hello-go-wasm
+          path: go/examples/hello/hello.wasm
+          retention-days: 7
+
   integration:
     needs: build-test
     runs-on: ubuntu-latest
@@ -47,6 +87,10 @@ jobs:
         with:
           name: hello-wasm
           path: ts/examples/hello/
+      # TODO(engine): the examples are pure (no `capabilities:` grant) and
+      # need an engine that honors info().pure — bump to the release
+      # honoring info().pure (Perfscale/perfscale > v0.23.0) once released.
+      # Until then the run steps below are expected to fail (fail-closed).
       - name: Download perfscale v0.23.0 (linux-amd64)
         run: |
           curl -fsSL -o perfscale-linux-amd64 \
@@ -64,3 +108,35 @@ jobs:
         run: |
           cat hello-out.txt
           grep -q 'greeting: hello, world!' hello-out.txt
+
+  integration-go:
+    needs: go-example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: hello-go-wasm
+          path: go/examples/hello/
+      # TODO(engine): same as the `integration` job — bump to the release
+      # honoring info().pure (Perfscale/perfscale > v0.23.0) once released.
+      - name: Download perfscale v0.23.0 (linux-amd64)
+        run: |
+          curl -fsSL -o perfscale-linux-amd64 \
+            https://github.com/Perfscale/perfscale/releases/download/v0.23.0/perfscale-linux-amd64
+          curl -fsSL https://github.com/Perfscale/perfscale/releases/download/v0.23.0/sha256sums.txt \
+            | grep linux-amd64 | sha256sum -c --ignore-missing
+          mv perfscale-linux-amd64 perfscale
+          chmod +x perfscale
+          ./perfscale --version
+      - name: Run the Go example through the engine
+        working-directory: go/examples/hello
+        run: "$GITHUB_WORKSPACE/perfscale run -f hello.test.yaml -c hello.config.yaml"
+      - name: Assert token expansion matches the TS example
+        working-directory: go/examples/hello
+        run: |
+          cat hello-out.txt
+          # The token varies between runs (per-instance PRNG stream), so assert
+          # the greeting and the memo invariant (token == again), not a literal.
+          grep -q 'greeting: hello, world!' hello-out.txt
+          awk -F'token: |; again: ' '$2 != $3 { exit 1 }' hello-out.txt

@@ -161,6 +161,13 @@ export interface LibraryDefinition {
   /** Library version, surfaced by `info()`. Default `"0.0.0"`. */
   version?: string;
   /**
+   * Purity marker reported by `info()`. Default `true`: the SDK exposes no
+   * filesystem/clock APIs, so libraries built with it are pure; set `false`
+   * only if you link WASI imports yourself. Pure libraries skip the
+   * `capabilities: [fs]` grant on engines that honor the marker.
+   */
+  pure?: boolean;
+  /**
    * Initialize with the YAML `with:` block (already parsed from JSON; the
    * block may be absent, giving `null`). The default accepts and ignores any
    * config — override to validate. Throwing is fatal to the run.
@@ -293,6 +300,7 @@ function infoJson(def: LibraryDefinition, fallbackName: string): string {
   return JSON.stringify({
     name: (def.name ?? fallbackName).replaceAll("-", "_"),
     version: def.version ?? "0.0.0",
+    pure: def.pure ?? true,
     functions: Object.entries(def.functions).map(([name, f]) => ({
       name,
       description: f.description ?? "",

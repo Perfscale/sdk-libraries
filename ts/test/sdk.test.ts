@@ -129,7 +129,24 @@ describe("__exportLibrary (component glue)", () => {
     assert.deepEqual(JSON.parse(c.info()), {
       name: "my_lib", // dashes → underscores (alias must be [a-z][a-z0-9_]*)
       version: "1.2.3",
+      pure: true,
       functions: [{ name: "tok", description: "d", secret: true }],
+    });
+  });
+
+  it("info() honors an explicit pure: false opt-out", () => {
+    const c = __exportLibrary(
+      defineLibrary({
+        name: "wasi-linker",
+        pure: false,
+        functions: { tok: { call: () => "x" } },
+      }),
+    );
+    assert.deepEqual(JSON.parse(c.info()), {
+      name: "wasi_linker",
+      version: "0.0.0",
+      pure: false,
+      functions: [{ name: "tok", description: "", secret: false }],
     });
   });
 

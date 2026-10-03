@@ -5,3 +5,4 @@ dist/
 hello-out.txt
 .DS_Store
 *.tgz
+go/examples/hello/.build/

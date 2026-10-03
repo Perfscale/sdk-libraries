@@ -7,8 +7,7 @@ tokens in [perfscale](https://github.com/Perfscale/perfscale) test payloads
 
 ```yaml
 libraries:
-  - use: ./hello.wasm
-    capabilities: [fs]
+  - use: ./hello.wasm   # pure component — no capabilities grant needed
 steps:
   - use: std/file-write@v1
     with:
@@ -85,12 +84,16 @@ A complete runnable example lives in
 ## Sandboxing notes for TS authors
 
 - jco (StarlingMonkey) components always import `wasi:filesystem/*` and
-  `wasi:clocks/wall-clock`; declare `capabilities: [fs]` on the `libraries:`
-  entry (one `fs` grant satisfies both — a read-only preopen of the run's
-  `fs_root`) and set `allow_library_capabilities: true` in the config. The
-  build already disables `wasi:random`, `wasi:http` and timers, which the
-  engine never grants — draw all randomness from `ctx.rng()` and all time
-  from `ctx.timeMs`.
+  `wasi:clocks/wall-clock`, but that is toolchain noise: the SDK reports
+  `"pure": true` in `info()` (it exposes no fs/clock APIs to authors), so
+  engines honoring the pure marker waive the capability requirement and
+  provide no preopens — no `capabilities:` grant is needed. On engines older
+  than the pure-marker release the grant is still required
+  (`capabilities: [fs]` on the `libraries:` entry, one `fs` grant satisfies
+  both imports, plus `allow_library_capabilities: true` in the config) —
+  old engines fail closed. The build already disables `wasi:random`,
+  `wasi:http` and timers, which the engine never grants — draw all
+  randomness from `ctx.rng()` and all time from `ctx.timeMs`.
 - The WIT contract is vendored at `wit/library.wit`;
   `scripts/sync-wit.sh` re-fetches it pinned to a perfscale release tag
   (bump `PERFSCALE_TAG` deliberately).

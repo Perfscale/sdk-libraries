@@ -1,0 +1,16 @@
+package wasi:clocks@0.2.0;
+
+interface monotonic-clock {
+    type instant = u64;
+
+    now: func() -> instant;
+}
+
+interface wall-clock {
+    record datetime {
+        seconds: u64,
+        nanoseconds: u32,
+    }
+
+    now: func() -> datetime;
+}

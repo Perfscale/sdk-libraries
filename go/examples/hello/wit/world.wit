@@ -1,0 +1,22 @@
+package perfscale:library-wasi@0.1.0;
+
+// Build-only world for TinyGo: `wasm-tools component new` requires every core
+// import to be declared in the world, and the TinyGo wasip2 runtime links the
+// WASI interfaces below unconditionally. The perfscale engine loads any
+// component exporting `perfscale:library/library@0.1.x`; the pure marker in
+// info() waives the fs/clock grants at load time. This file is NOT the ABI
+// contract — the contract is ts/wit/library.wit (vendored under deps/).
+world perfscale-library-wasi {
+    import wasi:io/error@0.2.0;
+    import wasi:io/streams@0.2.0;
+    import wasi:cli/environment@0.2.0;
+    import wasi:cli/stdin@0.2.0;
+    import wasi:cli/stdout@0.2.0;
+    import wasi:cli/stderr@0.2.0;
+    import wasi:clocks/monotonic-clock@0.2.0;
+    import wasi:clocks/wall-clock@0.2.0;
+    import wasi:filesystem/types@0.2.0;
+    import wasi:filesystem/preopens@0.2.0;
+
+    export perfscale:library/library@0.1.0;
+}

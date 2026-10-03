@@ -1,0 +1,23 @@
+package wasi:io@0.2.0;
+
+interface error {
+    resource error;
+}
+
+interface streams {
+    use error.{error};
+
+    resource input-stream {
+        blocking-read: func(len: u64) -> result<list<u8>, stream-error>;
+    }
+
+    variant stream-error {
+        last-operation-failed(error),
+        closed,
+    }
+
+    resource output-stream {
+        blocking-write-and-flush: func(contents: list<u8>) -> result<_, stream-error>;
+        blocking-flush: func() -> result<_, stream-error>;
+    }
+}
