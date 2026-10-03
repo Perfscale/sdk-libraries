@@ -47,7 +47,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: "1.24"
+          # TinyGo 0.42 builds against Go 1.25–1.27 — keep in range.
+          go-version: "1.25"
       - uses: acifani/setup-tinygo@f51bf108c9895381060398804ce6cf6f62692106 # v3
         with:
           tinygo-version: "0.42.0"
