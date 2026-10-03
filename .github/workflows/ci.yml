@@ -88,15 +88,13 @@ jobs:
         with:
           name: hello-wasm
           path: ts/examples/hello/
-      # TODO(engine): the examples are pure (no `capabilities:` grant) and
-      # need an engine that honors info().pure — bump to the release
-      # honoring info().pure (Perfscale/perfscale > v0.23.0) once released.
-      # Until then the run steps below are expected to fail (fail-closed).
-      - name: Download perfscale v0.23.0 (linux-amd64)
+      # The examples are pure (explicit `capabilities: []` grant) and need an
+      # engine that honors info().pure — v0.24.0 does.
+      - name: Download perfscale v0.24.0 (linux-amd64)
         run: |
           curl -fsSL -o perfscale-linux-amd64 \
-            https://github.com/Perfscale/perfscale/releases/download/v0.23.0/perfscale-linux-amd64
-          curl -fsSL https://github.com/Perfscale/perfscale/releases/download/v0.23.0/sha256sums.txt \
+            https://github.com/Perfscale/perfscale/releases/download/v0.24.0/perfscale-linux-amd64
+          curl -fsSL https://github.com/Perfscale/perfscale/releases/download/v0.24.0/sha256sums.txt \
             | grep linux-amd64 | sha256sum -c --ignore-missing
           mv perfscale-linux-amd64 perfscale
           chmod +x perfscale
@@ -119,13 +117,13 @@ jobs:
         with:
           name: hello-go-wasm
           path: go/examples/hello/
-      # TODO(engine): same as the `integration` job — bump to the release
-      # honoring info().pure (Perfscale/perfscale > v0.23.0) once released.
-      - name: Download perfscale v0.23.0 (linux-amd64)
+      # Same engine as the `integration` job — honors info().pure and serves
+      # both ABI majors (the Go example stays on 0.1).
+      - name: Download perfscale v0.24.0 (linux-amd64)
         run: |
           curl -fsSL -o perfscale-linux-amd64 \
-            https://github.com/Perfscale/perfscale/releases/download/v0.23.0/perfscale-linux-amd64
-          curl -fsSL https://github.com/Perfscale/perfscale/releases/download/v0.23.0/sha256sums.txt \
+            https://github.com/Perfscale/perfscale/releases/download/v0.24.0/perfscale-linux-amd64
+          curl -fsSL https://github.com/Perfscale/perfscale/releases/download/v0.24.0/sha256sums.txt \
             | grep linux-amd64 | sha256sum -c --ignore-missing
           mv perfscale-linux-amd64 perfscale
           chmod +x perfscale

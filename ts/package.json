@@ -1,6 +1,6 @@
 {
   "name": "@perfscale/library-sdk",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "TypeScript/JavaScript SDK for authoring perfscale WASM value-generator libraries (RFC 005)",
   "license": "(MIT OR Apache-2.0)",
   "repository": {

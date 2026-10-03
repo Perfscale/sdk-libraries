@@ -5,12 +5,13 @@
 #   scripts/sync-wit.sh              # fetch the pinned tag (PERFSCALE_TAG below)
 #   PERFSCALE_TAG=v0.22.0 scripts/sync-wit.sh
 #
-# The engine accepts perfscale:library/library@0.1.x; bump the pin (and the
-# SDK's exports if the ABI changed) deliberately, never float on main.
+# The engine dispatches bindings by ABI major version — 0.1 components keep
+# working, 0.2 adds `settings-json` to the call context. Bump the pin (and
+# the SDK's exports if the ABI changed) deliberately, never float on main.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PERFSCALE_TAG="${PERFSCALE_TAG:-v0.21.0}"
+PERFSCALE_TAG="${PERFSCALE_TAG:-v0.24.0}"
 URL="https://raw.githubusercontent.com/Perfscale/perfscale/${PERFSCALE_TAG}/wit/library.wit"
 OUT="wit/library.wit"
 

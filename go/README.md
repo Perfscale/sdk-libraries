@@ -7,9 +7,12 @@ the TS/Rust examples under the same `seed:`. Expect rough edges and please
 report what breaks.
 
 The contract is [`../ts/wit/library.wit`](../ts/wit/library.wit)
-(`perfscale:library@0.1.0`) — the single source of truth, shared with the
-engine and the Rust/TS SDKs. The engine loads any component exporting
-`perfscale:library/library@0.1.x`, so Go works as long as the component:
+(`perfscale:library@0.2.0`) — the single source of truth, shared with the
+engine and the Rust/TS SDKs. The engine dispatches bindings by ABI major
+version: this example still exports `perfscale:library/library@0.1.0`, which
+the engine keeps accepting — 0.1 components simply never see the 0.2
+`settings-json` field (the TS SDK has moved to 0.2). So Go works as long as
+the component:
 
 - exports `info()` / `init(config-json)` / `call(ctx, func-name, args-json)`
   exactly as the WIT specifies,
@@ -18,7 +21,9 @@ engine and the Rust/TS SDKs. The engine loads any component exporting
   sinks). `wasi:random/*` and `wasi:http/*` are hard load errors today. If
   `info()` reports `"pure": true` (the example does), engines honoring the
   pure marker waive the fs/wall-clock capability requirement and provide no
-  preopens.
+  preopens. The `libraries:` entry must still carry an explicit
+  `capabilities:` key (`[]` = no grants) — perfscale ≥ the upcoming release
+  rejects entries that omit it.
 
 ## Ingredients
 

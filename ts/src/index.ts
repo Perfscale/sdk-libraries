@@ -68,6 +68,70 @@ export class Prng {
 }
 
 // ---------------------------------------------------------------------------
+// Run settings (WIT 0.2 `settings-json`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The run settings as the engine freezes them once at run start (RFC 005
+ * "Run settings"). `vus`/`duration_ms` are only set for the fixed load
+ * profile; staged/arrival runs leave them `null` and carry the profile in
+ * `stages`/`arrival` (durations normalized to milliseconds). `variables` is
+ * the config `variables:` block with `${{ env.* }}` already resolved. The
+ * snapshot is deeply frozen — it is identical for every call of the run.
+ */
+export interface RunSettings {
+  vus: number | null;
+  duration_ms: number | null;
+  seed: number | null;
+  stages: Array<{ duration_ms: number; target: number }> | null;
+  arrival: {
+    max_vus: number;
+    pre_allocated_vus: number;
+    stages: Array<{ duration_ms: number; rate: number }>;
+  } | null;
+  variables: Record<string, unknown>;
+}
+
+function deepFreeze<T>(v: T): T {
+  if (v !== null && typeof v === "object" && !Object.isFrozen(v)) {
+    for (const child of Object.values(v)) deepFreeze(child);
+    Object.freeze(v);
+  }
+  return v;
+}
+
+const EMPTY_SETTINGS: RunSettings = deepFreeze({
+  vus: null,
+  duration_ms: null,
+  seed: null,
+  stages: null,
+  arrival: null,
+  variables: {},
+});
+
+/**
+ * Parse the ABI's `settings-json` into a frozen {@link RunSettings}
+ * snapshot. Unknown/absent keys fall back to the documented defaults; the
+ * empty string (and `"{}"`, what a 0.1 host sends) yields all-null
+ * settings with empty variables.
+ */
+export function parseRunSettings(settingsJson: string): RunSettings {
+  const raw: unknown = settingsJson.trim() === "" ? {} : JSON.parse(settingsJson);
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new LibraryError("settings-json must be a JSON object");
+  }
+  const o = raw as Record<string, unknown>;
+  return deepFreeze({
+    vus: (o.vus ?? null) as number | null,
+    duration_ms: (o.duration_ms ?? null) as number | null,
+    seed: (o.seed ?? null) as number | null,
+    stages: (o.stages ?? null) as RunSettings["stages"],
+    arrival: (o.arrival ?? null) as RunSettings["arrival"],
+    variables: deepFreeze({ ...((o.variables as Record<string, unknown> | null) ?? {}) }),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Call context
 // ---------------------------------------------------------------------------
 
@@ -90,6 +154,12 @@ export class Ctx {
   seed: bigint;
   /** Wall clock, unix milliseconds — the only time source a library gets. */
   timeMs: bigint = 0n;
+  /**
+   * The run's settings, frozen once at run start (WIT 0.2 `settings-json`).
+   * Identical for every call of the run; on a 0.1 host (or before the first
+   * call) every field is `null` and `variables` is empty.
+   */
+  settings: RunSettings = EMPTY_SETTINGS;
 
   // SDK-managed state (not part of the ABI). A Map is safe here: JS Maps
   // are not seeded through wasi:random the way Rust's HashMap is.
@@ -280,13 +350,15 @@ export function testCall(
 // Component export glue — used by `perfscale-library-build`; not public API.
 // ---------------------------------------------------------------------------
 
-/** The WIT `context` record as it arrives over the ABI (u64 → bigint). */
+/** The WIT 0.2 `context` record as it arrives over the ABI (u64 → bigint). */
 export interface WitContext {
   messageSeq: bigint;
   iterationSeq: bigint;
   vuId: bigint;
   seed: bigint;
   timeMs: bigint;
+  /** Run settings JSON, frozen at run start (see {@link RunSettings}). */
+  settingsJson: string;
 }
 
 /** The shape the `perfscale:library/library` world expects from the guest. */
@@ -329,11 +401,16 @@ export function __exportLibrary(
   // lives here, so it must survive across calls). Components are
   // single-threaded; module scope is the instance.
   let ctx: Ctx | undefined;
+  // settings-json is frozen at run start, so the string is identical on
+  // every call — parse once per unique string.
+  let settingsRaw: string | undefined;
+  let settingsParsed: RunSettings = EMPTY_SETTINGS;
   return {
     info: () => infoJson(def, fallbackName),
     init(configJson: string): void {
       const config: unknown = configJson.trim() === "" ? null : JSON.parse(configJson);
       ctx = new Ctx(0n);
+      ctx.settings = settingsParsed;
       def.init?.(config);
     },
     call(wc: WitContext, funcName: string, argsJson: string): string {
@@ -346,12 +423,18 @@ export function __exportLibrary(
       if (!Array.isArray(argv)) {
         throw new LibraryError(`${funcName}: args JSON must be an array`);
       }
+      const sj = wc.settingsJson ?? "{}";
+      if (sj !== settingsRaw) {
+        settingsParsed = parseRunSettings(sj);
+        settingsRaw = sj;
+      }
       ctx ??= new Ctx(0n);
       ctx.messageSeq = BigInt(wc.messageSeq);
       ctx.iterationSeq = BigInt(wc.iterationSeq);
       ctx.vuId = BigInt(wc.vuId);
       ctx.seed = BigInt(wc.seed);
       ctx.timeMs = BigInt(wc.timeMs);
+      ctx.settings = settingsParsed;
       const f = def.functions[funcName];
       if (!f) throw new LibraryError(`unknown function '${funcName}'`);
       return f.call(argv, ctx);

@@ -6,7 +6,8 @@ value-generating functions to `${alias.fn(...)}` tokens in
 
 ```yaml
 libraries:
-  - use: ./hello.wasm   # pure component — no capabilities grant needed
+  - use: ./hello.wasm
+    capabilities: []   # explicit no-grants declaration; required by perfscale ≥ the upcoming release (pure component needs no grants)
 steps:
   - use: std/file-write@v1
     with:
@@ -15,7 +16,7 @@ steps:
 ```
 
 The engine runs each library in a wasmtime sandbox under a fail-closed
-capability model; the ABI contract (`perfscale:library@0.1.0`) is
+capability model; the ABI contract (`perfscale:library@0.2.0`) is
 [`ts/wit/library.wit`](ts/wit/library.wit), mirrored from the main repo's
 single source of truth.
 
@@ -66,7 +67,8 @@ call it from `${...}` tokens in payloads.
 The SDK also gives you:
 
 - **`Ctx`** — per-call context (`messageSeq`, `iterationSeq`, `vuId`,
-  `seed`, `timeMs` as `bigint`), `ctx.memo(key, fn)` (keyed reuse within one
+  `seed`, `timeMs` as `bigint`), `ctx.settings` — the run's frozen settings
+  snapshot (WIT 0.2 `settings-json`), `ctx.memo(key, fn)` (keyed reuse within one
   message), and `ctx.rng()` — a seeded xorshift64 PRNG **bit-identical to the
   Rust SDK and the engine's built-in generator**, so `seed:` runs reproduce.
 - **Args helpers** (`args.string/int/float/optionalString`) with
@@ -89,7 +91,8 @@ The SDK also gives you:
   `wasi:clocks/wall-clock`, but that is toolchain noise: the SDK reports
   `"pure": true` in `info()` (it exposes no fs/clock APIs to authors), so
   engines honoring the pure marker waive the capability requirement and
-  provide no preopens — no `capabilities:` grant is needed. On engines older
+  provide no preopens — declare `capabilities: []` (explicit no-grants key,
+  required by perfscale ≥ the upcoming release) and nothing more. On engines older
   than the pure-marker release the grant is still required
   (`capabilities: [fs]` on the `libraries:` entry, one `fs` grant satisfies
   both imports, plus `allow_library_capabilities: true` in the config) —
@@ -110,7 +113,7 @@ $ docker run --rm -v "$PWD:/src" -w /src perfscale-library-build mylib.ts -o myl
 ```
 
 The image is Node 24 + the published `@perfscale/library-sdk` (jco included);
-pin the SDK with `--build-arg SDK_VERSION=0.1.3` (`ts/docker/Dockerfile`).
+pin the SDK with `--build-arg SDK_VERSION=0.2.0` (`ts/docker/Dockerfile`).
 
 **Rust** — the SDK lives in the engine repo; any `rust:1.x` image with
 `wasm32-wasip2` added (`rustup target add wasm32-wasip2`) builds components

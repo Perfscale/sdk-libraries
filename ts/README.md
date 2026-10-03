@@ -7,7 +7,8 @@ tokens in [perfscale](https://github.com/Perfscale/perfscale) test payloads
 
 ```yaml
 libraries:
-  - use: ./hello.wasm   # pure component — no capabilities grant needed
+  - use: ./hello.wasm
+    capabilities: []   # explicit no-grants declaration; required by perfscale ≥ the upcoming release (pure component needs no grants)
 steps:
   - use: std/file-write@v1
     with:
@@ -16,7 +17,7 @@ steps:
 ```
 
 The engine runs each library in a wasmtime sandbox under a fail-closed
-capability model; the ABI contract (`perfscale:library@0.1.0`) is
+capability model; the ABI contract (`perfscale:library@0.2.0`) is
 [`wit/library.wit`](wit/library.wit), mirrored from the main repo's single
 source of truth.
 
@@ -61,7 +62,10 @@ declaring file) and call it from `${...}` tokens in payloads.
 - **`defineLibrary`** — declares the library name and its functions; the
   default export is what the build wires to the `perfscale:library` ABI.
 - **`Ctx`** — per-call context (`messageSeq`, `iterationSeq`, `vuId`,
-  `seed`, `timeMs` as `bigint`), `ctx.memo(key, fn)` (keyed reuse within one
+  `seed`, `timeMs` as `bigint`), `ctx.settings` — the run's frozen settings
+  snapshot (WIT 0.2 `settings-json`: `vus`/`duration_ms` or
+  `stages`/`arrival`, `seed`, `variables` with env resolved),
+  `ctx.memo(key, fn)` (keyed reuse within one
   message), and `ctx.rng()` — a seeded xorshift64 PRNG **bit-identical to the
   Rust SDK and the engine's built-in generator**, so `seed:` runs reproduce.
 - **Args helpers** (`args.string/int/float/optionalString`) with
@@ -87,7 +91,9 @@ A complete runnable example lives in
   `wasi:clocks/wall-clock`, but that is toolchain noise: the SDK reports
   `"pure": true` in `info()` (it exposes no fs/clock APIs to authors), so
   engines honoring the pure marker waive the capability requirement and
-  provide no preopens — no `capabilities:` grant is needed. On engines older
+  provide no preopens — declare `capabilities: []` (explicit no-grants key,
+  required by perfscale ≥ the upcoming release) and nothing more. On engines
+  older
   than the pure-marker release the grant is still required
   (`capabilities: [fs]` on the `libraries:` entry, one `fs` grant satisfies
   both imports, plus `allow_library_capabilities: true` in the config) —

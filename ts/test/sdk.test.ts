@@ -116,6 +116,7 @@ describe("__exportLibrary (component glue)", () => {
     vuId: 0n,
     seed: 42n,
     timeMs: 0n,
+    settingsJson: "{}",
   };
 
   it("info() emits the metadata JSON", () => {
@@ -161,5 +162,118 @@ describe("__exportLibrary (component glue)", () => {
   it("init rejects invalid JSON", () => {
     const c = __exportLibrary(memoLib);
     assert.throws(() => c.init("{"));
+  });
+});
+
+describe("Ctx.settings (WIT 0.2 settings-json)", () => {
+  const settingsJson = JSON.stringify({
+    vus: 10,
+    duration_ms: 300000,
+    seed: 42,
+    stages: null,
+    arrival: null,
+    variables: { base_url: "https://api.test", token: "s3cret" },
+  });
+  const settingsLib = defineLibrary({
+    name: "settings_probe",
+    functions: {
+      // Surface the settings a 0.2-shaped WitContext delivers to the Ctx.
+      probe: {
+        call(_args, ctx) {
+          return JSON.stringify(ctx.settings);
+        },
+      },
+    },
+  });
+
+  it("exposes the parsed frozen run settings on ctx.settings", () => {
+    const c = __exportLibrary(settingsLib);
+    c.init("{}");
+    const out = c.call(
+      { messageSeq: 1n, iterationSeq: 0n, vuId: 3n, seed: 7n, timeMs: 0n, settingsJson },
+      "probe",
+      "[]",
+    );
+    assert.deepEqual(JSON.parse(out), {
+      vus: 10,
+      duration_ms: 300000,
+      seed: 42,
+      stages: null,
+      arrival: null,
+      variables: { base_url: "https://api.test", token: "s3cret" },
+    });
+  });
+
+  it("freezes the snapshot and reuses it across calls", () => {
+    let seen: unknown;
+    const lib = defineLibrary({
+      functions: {
+        grab: {
+          call(_args, ctx) {
+            seen = ctx.settings;
+            return "ok";
+          },
+        },
+      },
+    });
+    const c = __exportLibrary(lib);
+    const wc = { messageSeq: 1n, iterationSeq: 0n, vuId: 0n, seed: 0n, timeMs: 0n, settingsJson };
+    c.call(wc, "grab", "[]");
+    const first = seen;
+    assert.ok(Object.isFrozen(first));
+    assert.ok(Object.isFrozen((first as { variables: object }).variables));
+    assert.throws(() => {
+      (first as { vus: number | null }).vus = 99;
+    }, TypeError);
+    c.call({ ...wc, messageSeq: 2n }, "grab", "[]");
+    assert.equal(seen, first); // same string → same frozen object
+  });
+
+  it("carries staged/arrival profiles and nulls for fixed fields", () => {
+    const c = __exportLibrary(settingsLib);
+    const out = c.call(
+      {
+        messageSeq: 1n,
+        iterationSeq: 0n,
+        vuId: 0n,
+        seed: 0n,
+        timeMs: 0n,
+        settingsJson: JSON.stringify({
+          vus: null,
+          duration_ms: null,
+          seed: null,
+          stages: [{ duration_ms: 60000, target: 50 }],
+          arrival: null,
+          variables: {},
+        }),
+      },
+      "probe",
+      "[]",
+    );
+    assert.deepEqual(JSON.parse(out), {
+      vus: null,
+      duration_ms: null,
+      seed: null,
+      stages: [{ duration_ms: 60000, target: 50 }],
+      arrival: null,
+      variables: {},
+    });
+  });
+
+  it("treats an empty settings-json (0.1 host behavior) as all-null", () => {
+    const c = __exportLibrary(settingsLib);
+    const out = c.call(
+      { messageSeq: 1n, iterationSeq: 0n, vuId: 0n, seed: 0n, timeMs: 0n, settingsJson: "{}" },
+      "probe",
+      "[]",
+    );
+    assert.deepEqual(JSON.parse(out), {
+      vus: null,
+      duration_ms: null,
+      seed: null,
+      stages: null,
+      arrival: null,
+      variables: {},
+    });
   });
 });

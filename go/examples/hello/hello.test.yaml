@@ -1,9 +1,11 @@
 # Local e2e for the Go example component:
 #   perfscale run -f examples/hello/hello.test.yaml -c examples/hello/hello.config.yaml
-# No `capabilities:` grant — the component is pure (info() reports
-# `"pure": true`), so engines honoring the pure marker waive the fs grant.
+# `capabilities: []` — explicit no-grants declaration; required by perfscale ≥
+# the upcoming release. The component is pure (info() reports `"pure": true`),
+# so engines honoring the pure marker waive the fs grant.
 libraries:
   - use: ./hello.wasm
+    capabilities: []
 steps:
   - name: greet
     use: std/file-write@v1
