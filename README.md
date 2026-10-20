@@ -18,7 +18,10 @@ steps:
 The engine runs each library in a wasmtime sandbox under a fail-closed
 capability model; the ABI contract (`perfscale:library@0.2.0`) is
 [`ts/wit/library.wit`](ts/wit/library.wit), mirrored from the main repo's
-single source of truth.
+single source of truth. The same TS package also authors **WASM end-of-run
+reporters** (issue #9) — components rendering the canonical `report@v1`
+document once per run; the reporter ABI (`perfscale:reporter@0.1.0`) is
+[`ts/wit/reporter/reporter.wit`](ts/wit/reporter/reporter.wit).
 
 ## Languages
 

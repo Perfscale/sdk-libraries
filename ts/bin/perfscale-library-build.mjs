@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 
 function usage(code) {
   console.error(
-    "usage: perfscale-library-build <entry.ts|entry.js> -o <out.wasm> [--wit <wit-dir>] [--jco <path-to-jco>]",
+    "usage: perfscale-library-build <entry.ts|entry.js> -o <out.wasm> [--kind library|reporter] [--wit <wit-dir>] [--jco <path-to-jco>]",
   );
   process.exit(code);
 }
@@ -38,12 +38,14 @@ const positional = [];
 let out;
 let witDir;
 let jcoBin;
+let kind = "library";
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === "-h" || a === "--help") usage(0);
   else if (a === "-o" || a === "--out") out = argv[++i];
   else if (a === "--wit") witDir = argv[++i];
   else if (a === "--jco") jcoBin = argv[++i];
+  else if (a === "--kind") kind = argv[++i];
   else if (a.startsWith("-")) {
     console.error(`unknown option: ${a}`);
     usage(1);
@@ -51,6 +53,15 @@ for (let i = 0; i < argv.length; i++) {
 }
 const entry = positional[0];
 if (!entry || !out) usage(1);
+if (kind !== "library" && kind !== "reporter") {
+  console.error(`error: --kind must be 'library' or 'reporter', got '${kind}'`);
+  usage(1);
+}
+// Reporters implement `perfscale:reporter@0.1.0` (wit/reporter/reporter.wit):
+// a single `on-report(report-json, config-json)` export plus the host import
+// `emit-file`. Everything else (jco componentize, disabled WASI features) is
+// identical to the library build.
+const worldName = kind === "reporter" ? "perfscale-reporter" : "perfscale-library";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sdkRoot = path.resolve(here, "..");
@@ -62,10 +73,21 @@ const sdkEntry = existsSync(path.join(sdkRoot, "dist", "index.js"))
   ? path.join(sdkRoot, "dist", "index.js")
   : path.join(sdkRoot, "src", "index.ts");
 
-witDir ??= path.join(sdkRoot, "wit");
-if (!existsSync(path.join(witDir, "library.wit"))) {
-  console.error(`error: no library.wit under ${witDir} (run scripts/sync-wit.sh)`);
+witDir ??= path.join(sdkRoot, kind === "reporter" ? "wit/reporter" : "wit");
+const witFile = kind === "reporter" ? "reporter.wit" : "library.wit";
+const witPath = path.join(witDir, witFile);
+if (!existsSync(witPath)) {
+  console.error(`error: no ${witFile} under ${witDir} (run scripts/sync-wit.sh)`);
   process.exit(1);
+}
+
+// Reporter wrappers import the host's `emit-file` as
+// `perfscale:reporter/host@<version>` — componentize-js exposes world
+// imports as builtin modules under their fully-versioned WIT id, so the
+// version must come from the WIT package line.
+function witPackageVersion(file) {
+  const m = readFileSync(file, "utf8").match(/^package\s+\S+@([^;]+);/m);
+  return m?.[1] ?? null;
 }
 
 /// Find jco's bin by walking up from this file: jco is a runtime dependency
@@ -101,13 +123,30 @@ const fallbackName = path.basename(entryAbs).replace(/\.[^.]+$/, "");
 
 const tmp = mkdtempSync(path.join(tmpdir(), "perfscale-library-build-"));
 const wrapper = path.join(tmp, `${fallbackName}.component.ts`);
-writeFileSync(
-  wrapper,
-  `import def from ${JSON.stringify(entryAbs)};
+let wrapperSource;
+let bundleConfigPath;
+if (kind === "reporter") {
+  const version = witPackageVersion(witPath);
+  if (!version) {
+    console.error(`error: could not parse the package version from ${witPath}`);
+    process.exit(1);
+  }
+  wrapperSource = `import def from ${JSON.stringify(entryAbs)};
+import { __exportReporter } from ${JSON.stringify(sdkEntry)};
+import { emitFile } from "perfscale:reporter/host@${version}";
+export const reporter = __exportReporter(def, emitFile);
+`;
+  // The `perfscale:reporter/host@…` import is a component builtin, not a
+  // file: keep it external when rolldown bundles the TS sources.
+  bundleConfigPath = path.join(tmp, "bundle.config.mjs");
+  writeFileSync(bundleConfigPath, `export default { external: [/^perfscale:/] };\n`);
+} else {
+  wrapperSource = `import def from ${JSON.stringify(entryAbs)};
 import { __exportLibrary } from ${JSON.stringify(sdkEntry)};
 export const library = __exportLibrary(def, ${JSON.stringify(fallbackName)});
-`,
-);
+`;
+}
+writeFileSync(wrapper, wrapperSource);
 
 mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
 
@@ -118,7 +157,8 @@ const cmd = [
   "--wit",
   witDir,
   "--world-name",
-  "perfscale-library",
+  worldName,
+  ...(bundleConfigPath ? ["--bundle-config", bundleConfigPath] : []),
   "--out",
   path.resolve(out),
   ...disable.flatMap((f) => ["--disable", f]),

@@ -1,0 +1,10 @@
+vus: 1
+duration: 1s
+seed: 42
+# Local e2e for the example reporter:
+#   perfscale run -f summary.test.yaml -c summary.config.yaml
+report:
+  reporters:
+    - use: wasm:./summary.wasm
+      with:
+        output: ./summary-out

@@ -1,0 +1,5 @@
+steps:
+  - name: nop
+    use: std/log@v1
+    with:
+      message: "tick"

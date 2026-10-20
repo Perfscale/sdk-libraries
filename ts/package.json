@@ -1,7 +1,7 @@
 {
   "name": "@perfscale/library-sdk",
-  "version": "0.2.0",
-  "description": "TypeScript/JavaScript SDK for authoring perfscale WASM value-generator libraries (RFC 005)",
+  "version": "0.3.0",
+  "description": "TypeScript/JavaScript SDK for authoring perfscale WASM libraries and end-of-run reporters (RFC 005, issue #9)",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
     "type": "git",
@@ -29,7 +29,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "node --test 'test/*.test.ts'",
-    "example:build": "node bin/perfscale-library-build.mjs examples/hello/hello.ts -o examples/hello/hello.wasm"
+    "example:build": "node bin/perfscale-library-build.mjs examples/hello/hello.ts -o examples/hello/hello.wasm",
+    "example:build:reporter": "node bin/perfscale-library-build.mjs --kind reporter examples/summary/summary.ts -o examples/summary/summary.wasm"
   },
   "dependencies": {
     "@bytecodealliance/jco": "^1.35.0",

@@ -21,6 +21,12 @@ capability model; the ABI contract (`perfscale:library@0.2.0`) is
 [`wit/library.wit`](wit/library.wit), mirrored from the main repo's single
 source of truth.
 
+The same package authors **WASM end-of-run reporters** (issue #9) — components
+that receive the canonical `report@v1` document once per run and write output
+files through the host's `emit-file` (no WASI fs/net). The reporter ABI
+(`perfscale:reporter@0.1.0`) is [`wit/reporter/reporter.wit`](wit/reporter/reporter.wit).
+See [Reporters](#reporters).
+
 ## Quickstart
 
 ```console
@@ -114,3 +120,45 @@ and needs no other toolchain.
 
 Dual-licensed under [MIT](../LICENSE-MIT) or
 [Apache-2.0](../LICENSE-APACHE), same as the main perfscale repo.
+
+## Reporters
+
+A reporter is a component implementing `perfscale:reporter@0.1.0`: the engine
+calls `onReport` once at end of run with the parsed `report@v1` document and
+the reporter's `with.config` block; output goes through `emit(name, contents)`
+into the reporter's output directory (`with.output`, path traversal refused).
+
+```ts
+import { defineReporter } from "@perfscale/library-sdk";
+
+export default defineReporter({
+  name: "summary",
+  onReport(report, config, emit) {
+    emit("summary.txt", `run ${report.run.run_id}: ${(report.steps ?? []).length} step(s)\n`);
+    return "summary.txt written";
+  },
+});
+```
+
+Build and use:
+
+```console
+$ npx perfscale-library-build --kind reporter summary.ts -o summary.wasm
+```
+
+```yaml
+report:
+  reporters:
+    - use: wasm:./summary.wasm   # path relative to the declaring file
+      with:
+        output: ./reports        # default ./perfscale-report-<module-stem>
+        config: { style: short } # handed to onReport verbatim
+```
+
+Guest errors (a throw inside `onReport`) are reported as the `err` variant of
+the WIT `result` — the engine logs and counts them (`engine_report_errors`)
+and the run's exit code is never affected. Unit-test reporters without a WASM
+runtime via `testReport(def, report, config)`; the `report@v1` document is
+typed as `ReportV1` ([`src/report.ts`](src/report.ts), a hand-written mirror of
+the engine's `report/v1.rs`). A runnable example lives in
+[`examples/summary`](examples/summary) (`npm run example:build:reporter`).

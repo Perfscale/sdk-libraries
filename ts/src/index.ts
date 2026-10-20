@@ -441,3 +441,14 @@ export function __exportLibrary(
     },
   };
 }
+
+export * from "./report.ts";
+export {
+  defineReporter,
+  ReporterError,
+  testReport,
+  __exportReporter,
+  type EmitFile,
+  type ReporterComponentExports,
+  type ReporterDefinition,
+} from "./reporter.ts";
