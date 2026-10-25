@@ -90,6 +90,9 @@ export interface RunSettings {
     stages: Array<{ duration_ms: number; rate: number }>;
   } | null;
   variables: Record<string, unknown>;
+  /** Library-claimed config extension blocks (issue #10), keyed by the
+   * claimed top-level config key. Absent on pre-0.3 hosts. */
+  extensions?: Record<string, unknown>;
 }
 
 function deepFreeze<T>(v: T): T {
@@ -128,6 +131,11 @@ export function parseRunSettings(settingsJson: string): RunSettings {
     stages: (o.stages ?? null) as RunSettings["stages"],
     arrival: (o.arrival ?? null) as RunSettings["arrival"],
     variables: deepFreeze({ ...((o.variables as Record<string, unknown> | null) ?? {}) }),
+    // Extension blocks (issue #10) only exist on 0.3 hosts that validated
+    // them; absent elsewhere, keeping older snapshots deep-equal.
+    ...(typeof o.extensions === "object" && o.extensions !== null
+      ? { extensions: deepFreeze({ ...(o.extensions as Record<string, unknown>) }) }
+      : {}),
   });
 }
 
@@ -220,6 +228,22 @@ export interface FunctionDef {
   call(args: unknown[], ctx: Ctx): string;
 }
 
+/**
+ * The config extension a library declares (issue #10): the top-level
+ * `config.yaml` key the library claims plus a JSON Schema for its value.
+ * The engine validates the user's block against the schema (fail-fast at
+ * lint/validate) and hands it to the guest via `ctx.settings.extensions[key]`.
+ * Requires building against the `perfscale-library-config` world —
+ * `perfscale-library-build` picks it automatically when `configSchema` is
+ * set.
+ */
+export interface ConfigSchemaDeclaration {
+  /** Top-level config key: `[a-z][a-z0-9_]*`, unique per run. */
+  key: string;
+  /** JSON Schema for the block's value. */
+  schema: Record<string, unknown>;
+}
+
 /** The library definition passed to {@link defineLibrary}. */
 export interface LibraryDefinition {
   /**
@@ -245,6 +269,8 @@ export interface LibraryDefinition {
   init?(config: unknown): void;
   /** Exported functions, keyed by the name used in `${alias.name(...)}`. */
   functions: Record<string, FunctionDef>;
+  /** Optional config extension declaration (issue #10). */
+  configSchema?: ConfigSchemaDeclaration;
 }
 
 /** Define a perfscale library. The result is the default export of your entry. */
@@ -255,6 +281,16 @@ export function defineLibrary(def: LibraryDefinition): LibraryDefinition {
   for (const [name, f] of Object.entries(def.functions)) {
     if (typeof f?.call !== "function") {
       throw new LibraryError(`defineLibrary: function '${name}' needs a call()`);
+    }
+  }
+  if (def.configSchema !== undefined) {
+    if (!/^[a-z][a-z0-9_]*$/.test(def.configSchema.key)) {
+      throw new LibraryError(
+        `defineLibrary: configSchema key '${def.configSchema.key}' must match [a-z][a-z0-9_]*`,
+      );
+    }
+    if (typeof def.configSchema.schema !== "object" || def.configSchema.schema === null) {
+      throw new LibraryError("defineLibrary: configSchema.schema must be a JSON Schema object");
     }
   }
   return def;
@@ -440,6 +476,24 @@ export function __exportLibrary(
       return f.call(argv, ctx);
     },
   };
+}
+
+/**
+ * Wrap a definition's {@link ConfigSchemaDeclaration} into the WIT world's
+ * `config-schema` export. The build script adds it when the entry declares
+ * `configSchema` (and switches to the `perfscale-library-config` world):
+ *
+ * ```js
+ * export const configSchema = __exportConfigSchema(def);
+ * ```
+ *
+ * @internal
+ */
+export function __exportConfigSchema(def: LibraryDefinition): { configSchema(): string } {
+  const decl = def.configSchema;
+  if (!decl) throw new LibraryError("__exportConfigSchema: the library declares no configSchema");
+  const json = JSON.stringify({ key: decl.key, schema: decl.schema });
+  return { configSchema: () => json };
 }
 
 export * from "./report.ts";

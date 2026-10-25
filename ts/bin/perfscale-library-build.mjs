@@ -61,7 +61,16 @@ if (kind !== "library" && kind !== "reporter") {
 // a single `on-report(report-json, config-json)` export plus the host import
 // `emit-file`. Everything else (jco componentize, disabled WASI features) is
 // identical to the library build.
-const worldName = kind === "reporter" ? "perfscale-reporter" : "perfscale-library";
+// A library whose entry declares `configSchema` (issue #10) builds against
+// the config world, which adds the `config-schema` export.
+const entrySource = readFileSync(entry, "utf8");
+const hasConfigSchema = kind === "library" && /\bconfigSchema\s*:/.test(entrySource);
+const worldName =
+  kind === "reporter"
+    ? "perfscale-reporter"
+    : hasConfigSchema
+      ? "perfscale-library-config"
+      : "perfscale-library";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sdkRoot = path.resolve(here, "..");
@@ -141,7 +150,13 @@ export const reporter = __exportReporter(def, emitFile);
   bundleConfigPath = path.join(tmp, "bundle.config.mjs");
   writeFileSync(bundleConfigPath, `export default { external: [/^perfscale:/] };\n`);
 } else {
-  wrapperSource = `import def from ${JSON.stringify(entryAbs)};
+  wrapperSource = hasConfigSchema
+    ? `import def from ${JSON.stringify(entryAbs)};
+import { __exportLibrary, __exportConfigSchema } from ${JSON.stringify(sdkEntry)};
+export const library = __exportLibrary(def, ${JSON.stringify(fallbackName)});
+export const configSchema = __exportConfigSchema(def);
+`
+    : `import def from ${JSON.stringify(entryAbs)};
 import { __exportLibrary } from ${JSON.stringify(sdkEntry)};
 export const library = __exportLibrary(def, ${JSON.stringify(fallbackName)});
 `;

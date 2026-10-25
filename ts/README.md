@@ -121,6 +121,36 @@ and needs no other toolchain.
 Dual-licensed under [MIT](../LICENSE-MIT) or
 [Apache-2.0](../LICENSE-APACHE), same as the main perfscale repo.
 
+## Config extensions (issue #10)
+
+A library can claim one top-level `config.yaml` key with a JSON Schema —
+the engine validates the user's block at lint/run start and hands it to the
+guest via `ctx.settings.extensions[key]`:
+
+```ts
+export default defineLibrary({
+  name: "mylib",
+  configSchema: {
+    key: "mylib",
+    schema: { type: "object", properties: { endpoint: { type: "string" } }, required: ["endpoint"] },
+  },
+  functions: { /* ... */ },
+});
+```
+
+```yaml
+libraries:
+  - use: ./mylib.wasm
+    capabilities: []
+mylib:                      # validated against the schema above
+  endpoint: https://api.test
+```
+
+`perfscale-library-build` builds against the `perfscale-library-config`
+world automatically when the entry declares `configSchema` (WIT 0.3.0).
+Example: [`examples/configlib`](examples/configlib)
+(`npm run example:build:configlib`).
+
 ## Reporters
 
 A reporter is a component implementing `perfscale:reporter@0.1.0`: the engine
