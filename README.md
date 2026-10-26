@@ -16,7 +16,7 @@ steps:
 ```
 
 The engine runs each library in a wasmtime sandbox under a fail-closed
-capability model; the ABI contract (`perfscale:library@0.2.0`) is
+capability model; the ABI contract (`perfscale:library@0.3.0`) is
 [`ts/wit/library.wit`](ts/wit/library.wit), mirrored from the main repo's
 single source of truth. The same TS package also authors **WASM end-of-run
 reporters** (issue #9) — components rendering the canonical `report@v1`
@@ -71,8 +71,10 @@ The SDK also gives you:
 
 - **`Ctx`** — per-call context (`messageSeq`, `iterationSeq`, `vuId`,
   `seed`, `timeMs` as `bigint`), `ctx.settings` — the run's frozen settings
-  snapshot (WIT 0.2 `settings-json`), `ctx.memo(key, fn)` (keyed reuse within one
-  message), and `ctx.rng()` — a seeded xorshift64 PRNG **bit-identical to the
+  snapshot plus `extensions` (validated config-extension blocks, see
+  [Config extensions](ts/README.md#config-extensions-issue-10)),
+  `ctx.memo(key, fn)` (keyed reuse within one message), and `ctx.rng()` — a
+  seeded xorshift64 PRNG **bit-identical to the
   Rust SDK and the engine's built-in generator**, so `seed:` runs reproduce.
 - **Args helpers** (`args.string/int/float/optionalString`) with
   author-friendly errors.

@@ -88,17 +88,13 @@ jobs:
         with:
           name: hello-wasm
           path: ts/examples/hello/
-      # The examples are pure (explicit `capabilities: []` grant) and need an
-      # engine that honors info().pure — v0.24.0 does.
-      - name: Download perfscale v0.24.0 (linux-amd64)
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build current Perfscale from source
         run: |
-          curl -fsSL -o perfscale-linux-amd64 \
-            https://github.com/Perfscale/perfscale/releases/download/v0.24.0/perfscale-linux-amd64
-          curl -fsSL https://github.com/Perfscale/perfscale/releases/download/v0.24.0/sha256sums.txt \
-            | grep linux-amd64 | sha256sum -c --ignore-missing
-          mv perfscale-linux-amd64 perfscale
-          chmod +x perfscale
-          ./perfscale --version
+          git clone --depth 1 https://github.com/Perfscale/perfscale.git /tmp/perfscale-src
+          cargo build --release -p perfscale-cli --manifest-path /tmp/perfscale-src/Cargo.toml
+          cp /tmp/perfscale-src/target/release/perfscale "$GITHUB_WORKSPACE/perfscale"
+          "$GITHUB_WORKSPACE/perfscale" --version
       - name: Run the example through the engine
         working-directory: ts/examples/hello
         run: "$GITHUB_WORKSPACE/perfscale run -f hello.test.yaml -c hello.config.yaml"
@@ -117,17 +113,13 @@ jobs:
         with:
           name: hello-go-wasm
           path: go/examples/hello/
-      # Same engine as the `integration` job — honors info().pure and serves
-      # both ABI majors (the Go example stays on 0.1).
-      - name: Download perfscale v0.24.0 (linux-amd64)
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build current Perfscale from source
         run: |
-          curl -fsSL -o perfscale-linux-amd64 \
-            https://github.com/Perfscale/perfscale/releases/download/v0.24.0/perfscale-linux-amd64
-          curl -fsSL https://github.com/Perfscale/perfscale/releases/download/v0.24.0/sha256sums.txt \
-            | grep linux-amd64 | sha256sum -c --ignore-missing
-          mv perfscale-linux-amd64 perfscale
-          chmod +x perfscale
-          ./perfscale --version
+          git clone --depth 1 https://github.com/Perfscale/perfscale.git /tmp/perfscale-src
+          cargo build --release -p perfscale-cli --manifest-path /tmp/perfscale-src/Cargo.toml
+          cp /tmp/perfscale-src/target/release/perfscale "$GITHUB_WORKSPACE/perfscale"
+          "$GITHUB_WORKSPACE/perfscale" --version
       - name: Run the Go example through the engine
         working-directory: go/examples/hello
         run: "$GITHUB_WORKSPACE/perfscale run -f hello.test.yaml -c hello.config.yaml"
