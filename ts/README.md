@@ -17,7 +17,7 @@ steps:
 ```
 
 The engine runs each library in a wasmtime sandbox under a fail-closed
-capability model; the ABI contract (`perfscale:library@0.2.0`) is
+capability model; the ABI contract (`perfscale:library@0.3.0`) is
 [`wit/library.wit`](wit/library.wit), mirrored from the main repo's single
 source of truth.
 
@@ -69,8 +69,10 @@ declaring file) and call it from `${...}` tokens in payloads.
   default export is what the build wires to the `perfscale:library` ABI.
 - **`Ctx`** — per-call context (`messageSeq`, `iterationSeq`, `vuId`,
   `seed`, `timeMs` as `bigint`), `ctx.settings` — the run's frozen settings
-  snapshot (WIT 0.2 `settings-json`: `vus`/`duration_ms` or
-  `stages`/`arrival`, `seed`, `variables` with env resolved),
+  snapshot (`vus`/`duration_ms` or `stages`/`arrival`, `seed`, `variables`
+  with env resolved — WIT 0.2 `settings-json`) plus `extensions` — validated
+  config-extension blocks keyed by each library's `configSchema.key`
+  (WIT 0.3, see [Config extensions](#config-extensions-issue-10)),
   `ctx.memo(key, fn)` (keyed reuse within one
   message), and `ctx.rng()` — a seeded xorshift64 PRNG **bit-identical to the
   Rust SDK and the engine's built-in generator**, so `seed:` runs reproduce.
@@ -116,11 +118,6 @@ Node.js ≥ 24 (the test harness relies on native type stripping). The build
 CLI wraps [`@bytecodealliance/jco`](https://www.npmjs.com/package/@bytecodealliance/jco)
 and needs no other toolchain.
 
-## License
-
-Dual-licensed under [MIT](../LICENSE-MIT) or
-[Apache-2.0](../LICENSE-APACHE), same as the main perfscale repo.
-
 ## Config extensions (issue #10)
 
 A library can claim one top-level `config.yaml` key with a JSON Schema —
@@ -128,23 +125,67 @@ the engine validates the user's block at lint/run start and hands it to the
 guest via `ctx.settings.extensions[key]`:
 
 ```ts
+import { defineLibrary } from "@perfscale/library-sdk";
+
 export default defineLibrary({
-  name: "mylib",
+  name: "configlib",
   configSchema: {
-    key: "mylib",
-    schema: { type: "object", properties: { endpoint: { type: "string" } }, required: ["endpoint"] },
+    key: "configlib",
+    schema: {
+      type: "object",
+      properties: {
+        endpoint: { type: "string" },
+        pool_size: { type: "integer", minimum: 1 },
+      },
+      required: ["endpoint"],
+      additionalProperties: false,
+    },
   },
-  functions: { /* ... */ },
+  functions: {
+    endpoint: {
+      description: "The configured endpoint (from the configlib: config block)",
+      call(_argv, ctx) {
+        const block = (ctx.settings.extensions ?? {})["configlib"] as
+          | { endpoint?: string; pool_size?: number }
+          | undefined;
+        return block?.endpoint ?? "https://localhost";
+      },
+    },
+  },
 });
+```
+
+The `config-schema` export serializes that declaration as this JSON string:
+
+```json
+{
+  "key": "configlib",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "endpoint": { "type": "string" },
+      "pool_size": { "type": "integer", "minimum": 1 }
+    },
+    "required": ["endpoint"],
+    "additionalProperties": false
+  }
+}
 ```
 
 ```yaml
 libraries:
-  - use: ./mylib.wasm
+  - use: ./configlib.wasm
     capabilities: []
-mylib:                      # validated against the schema above
+configlib:                  # validated against the schema above
   endpoint: https://api.test
+  pool_size: 16
 ```
+
+The extension block is optional; when omitted, `extensions` has no
+`configlib` entry. When present, it is validated at lint/run start — here
+`endpoint` is required, `pool_size` must be at least 1, and unknown fields
+are rejected. The key must match `[a-z][a-z0-9_]*` and must not collide with
+a built-in config key or another loaded library's claim.
 
 `perfscale-library-build` builds against the `perfscale-library-config`
 world automatically when the entry declares `configSchema` (WIT 0.3.0).
@@ -192,3 +233,8 @@ runtime via `testReport(def, report, config)`; the `report@v1` document is
 typed as `ReportV1` ([`src/report.ts`](src/report.ts), a hand-written mirror of
 the engine's `report/v1.rs`). A runnable example lives in
 [`examples/summary`](examples/summary) (`npm run example:build:reporter`).
+
+## License
+
+Dual-licensed under [MIT](../LICENSE-MIT) or
+[Apache-2.0](../LICENSE-APACHE), same as the main perfscale repo.
