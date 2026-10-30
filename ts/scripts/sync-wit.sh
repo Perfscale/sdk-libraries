@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Re-fetch the perfscale WIT contracts — the single source of truth lives in
-# the main perfscale repo at wit/library.wit and wit/reporter/reporter.wit.
+# the main perfscale repo at wit/library.wit, wit/reporter/reporter.wit and
+# wit/step/ (step.wit plus its pinned deps/perfscale-library/library.wit).
 #
 #   scripts/sync-wit.sh              # fetch the pinned tag (PERFSCALE_TAG below)
 #   PERFSCALE_TAG=v0.22.0 scripts/sync-wit.sh
@@ -36,3 +37,9 @@ fetch() {
 
 fetch "wit/library.wit" "wit/library.wit" "perfscale:library@"
 fetch "wit/reporter/reporter.wit" "wit/reporter/reporter.wit" "perfscale:reporter@"
+# The step ABI (RFC 009) lives in its own package dir; its `deps/` pins the
+# exact `perfscale:library` revision the step worlds re-export, so it is
+# synced with the step file, from the same tag — never mixed across tags.
+fetch "wit/step/step.wit" "wit/step/step.wit" "perfscale:step@"
+fetch "wit/step/deps/perfscale-library/library.wit" \
+  "wit/step/deps/perfscale-library/library.wit" "perfscale:library@"

@@ -1,0 +1,19 @@
+# Local e2e for the `process` capability (RFC 009). The test file only
+# carries `steps:`; the capability double opt-in lives in exec.config.yaml
+# (`capabilities: [process]` on the libraries entry AND
+# `allow_process_actions: true` + `allow_library_capabilities: true` here in
+# the config). Missing either side, the engine refuses to load the component
+# (fail-closed, like `net`).
+#
+#   perfscale run -f examples/steps/exec.test.yaml -c examples/steps/exec.config.yaml
+#
+# `${{ config.setup.stdout }}` reads the config `before:` step's output.
+steps:
+  - name: date
+    use: lib/exec/run
+    with:
+      executable: /bin/echo
+      argv: ["tick:", "${{ config.setup.stdout }}"]
+    outputs: said
+    check:
+      message_contains: tick

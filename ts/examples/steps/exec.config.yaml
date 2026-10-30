@@ -1,0 +1,19 @@
+# Config side of the exec example: profile, libraries, the one-shot
+# `before:` setup and the process-capability gates.
+vus: 1
+duration: 1s
+seed: 42
+# Double opt-in for the process capability: these config gates AND
+# `capabilities: [process]` on the libraries entry below.
+allow_library_capabilities: true
+allow_process_actions: true
+libraries:
+  - use: ./exec.wasm
+    capabilities: [process]
+before:
+  - name: warm-cache
+    use: lib/exec/run
+    with:
+      executable: /bin/echo
+      argv: ["cache warmed"]
+    outputs: setup             # → ${{ config.setup.stdout }} in test steps

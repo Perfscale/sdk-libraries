@@ -27,6 +27,12 @@ files through the host's `emit-file` (no WASI fs/net). The reporter ABI
 (`perfscale:reporter@0.1.0`) is [`wit/reporter/reporter.wit`](wit/reporter/reporter.wit).
 See [Reporters](#reporters).
 
+It also authors **custom steps** (RFC 009) — components whose steps run as
+test actions via `use: lib/<alias>/<step>` and return an `ActionOutput`
+(outputs, logs, metrics, an HTTP sample). The step ABI
+(`perfscale:step@0.1.0`) is [`wit/step/step.wit`](wit/step/step.wit).
+See [Steps](#steps-rfc-009).
+
 ## Quickstart
 
 ```console
@@ -191,6 +197,117 @@ a built-in config key or another loaded library's claim.
 world automatically when the entry declares `configSchema` (WIT 0.3.0).
 Example: [`examples/configlib`](examples/configlib)
 (`npm run example:build:configlib`).
+
+## Steps (RFC 009)
+
+A step component is a library whose manifest also lists **steps** — actions
+dispatched from a test's `use:` slot as `lib/<alias>/<step>`, alongside the
+built-in `std/*` actions. Define one with `defineSteps` (a superset of
+`defineLibrary`: `functions` may be omitted for a steps-only component, or
+kept for a combined one):
+
+```ts
+import { defineSteps } from "@perfscale/library-sdk";
+
+export default defineSteps({
+  name: "echo",
+  steps: {
+    echo: {
+      description: "Echo the `message` param into outputs and the log",
+      run(params, ctx) {
+        const message = String(params.message ?? "");
+        return {
+          output: { message },                              // → the step's `outputs:`
+          logs: [{ tag: "out", line: `${ctx.stepName}: ${message}` }],
+          metrics: { echo_len: message.length },            // custom series, [a-z0-9_]
+        };
+      },
+    },
+  },
+});
+```
+
+The step's `run(params, ctx)` receives the `with:` block (`${{ }}`
+interpolation already applied by the engine) and a `StepCtx` —
+`iterationSeq`/`vuId`/`timeMs` as `bigint` (0 for one-shot `before:`/`after:`
+steps), `stepName`, and the run's frozen `settings`. The returned
+`StepResult` serializes to the RFC 008 `ActionOutput`: `success` (default
+`true`), `output` (stored under the name given by the step's `outputs:` for
+later `${{ <name>.<field> }}` references and inline `check:` assertions),
+`logs`, `metrics` (number or `[ms, …]` series), `httpSample`, and
+`secretOutputPaths` (output keys the engine log-masks). Throw to fail the
+step — the error message becomes the failure cause.
+
+Build and use:
+
+```console
+$ npx perfscale-library-build --kind steps echo.ts -o echo.wasm
+```
+
+The config file carries the profile, gates, libraries and one-shot `before:`
+setup:
+
+```yaml
+# config.yaml
+vus: 1
+duration: 10s
+libraries:
+  - use: ./echo.wasm
+    capabilities: []
+before:
+  - name: setup
+    use: lib/echo/echo          # one-shot: vu/iteration = 0
+    with: { message: "starting" }
+    outputs: setup              # → ${{ config.setup.message }} in test steps
+```
+
+The test file carries the `steps:`; `outputs` is the variable name the step
+output is stored under, and inline `check` is an assertion map over it:
+
+```yaml
+# test.yaml
+steps:
+  - name: say
+    use: lib/echo/echo
+    with: { message: "hello from vu ${{ __vu__ }}" }
+    outputs: said
+    check:
+      message_contains: hello
+```
+
+### The `process` capability (double opt-in)
+
+Steps can spawn host processes through `ctx.exec(request)` — a bounded,
+host-mediated spawn (no shell, replacement environment, host-capped timeout,
+captured stdout/stderr). This is a capability the run must grant **twice**:
+the component declares `capabilities: [process]` AND the run config sets
+`allow_process_actions: true` (plus the `allow_library_capabilities: true`
+gate every non-empty grant needs). Build such components with `--process`,
+which selects the `perfscale-steps-exec` world whose `host-exec` import the
+host only connects when the grant is present — otherwise the component fails
+to even load (fail-closed, like `net`):
+
+```console
+$ npx perfscale-library-build --kind steps --process exec.ts -o exec.wasm
+```
+
+`ctx.exec` is only ever the bound WIT host function — Node's
+`child_process` does not exist inside the component; the runtime-free
+harness takes a fake: `new StepCtx((req) => ({ exitCode: 0, stdout: "", stderr: "" }))`.
+Examples: [`examples/steps`](examples/steps) (`npm run example:build:steps`,
+`npm run example:build:exec`).
+
+Unit-test steps without a WASM runtime via `testStep(def, ctx, name, params)`:
+
+```ts
+import assert from "node:assert/strict";
+import { StepCtx, testStep } from "@perfscale/library-sdk";
+import steps from "./echo.ts";
+
+const res = testStep(steps, new StepCtx(), "echo", { message: "hi" });
+assert.equal(res.success, true);
+assert.deepEqual(res.output, { message: "hi" });
+```
 
 ## Reporters
 

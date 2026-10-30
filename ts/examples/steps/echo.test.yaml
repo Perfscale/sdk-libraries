@@ -1,0 +1,18 @@
+# Local e2e for the example step component:
+#   perfscale run -f examples/steps/echo.test.yaml -c examples/steps/echo.config.yaml
+# The test file only carries `steps:` (plus optional `import:`); libraries,
+# `before:` setup and the profile/gates live in echo.config.yaml.
+#
+# The step's `use:` slot takes `lib/<alias>/<step>`; its `with:` block becomes
+# the step params (`${{ }}` interpolation applied by the engine first).
+# `outputs: said` stores the step output under the `said` variable; the
+# inline `check` is an assertion map over that output (`message_contains`
+# matches against the output's `message` field).
+steps:
+  - name: say
+    use: lib/echo/echo
+    with:
+      message: "hello from vu ${{ __vu__ }} — ${echo.shout(echo)}"
+    outputs: said
+    check:
+      message_contains: hello

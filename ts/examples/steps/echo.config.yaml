@@ -1,0 +1,17 @@
+# Config side of the echo example: profile, gates, libraries and the
+# one-shot `before:` setup (its output is visible to test steps as
+# `${{ config.setup.<field> }}`).
+vus: 1
+duration: 1s
+seed: 42
+# `capabilities: []` — explicit no-grants declaration (omitting the key is an
+# error); the component is pure, so no grants are needed.
+libraries:
+  - use: ./echo.wasm
+    capabilities: []
+before:
+  - name: setup
+    use: lib/echo/echo          # one-shot: vu/iteration = 0
+    with:
+      message: "starting"
+    outputs: setup
