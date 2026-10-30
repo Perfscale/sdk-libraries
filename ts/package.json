@@ -1,7 +1,7 @@
 {
   "name": "@perfscale/library-sdk",
   "version": "0.3.0",
-  "description": "TypeScript/JavaScript SDK for authoring perfscale WASM libraries and end-of-run reporters (RFC 005, issue #9)",
+  "description": "TypeScript/JavaScript SDK for authoring perfscale WASM libraries, custom steps and end-of-run reporters (RFC 005, RFC 009, issue #9)",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
     "type": "git",
@@ -31,7 +31,9 @@
     "test": "node --test 'test/*.test.ts'",
     "example:build": "node bin/perfscale-library-build.mjs examples/hello/hello.ts -o examples/hello/hello.wasm",
     "example:build:reporter": "node bin/perfscale-library-build.mjs --kind reporter examples/summary/summary.ts -o examples/summary/summary.wasm",
-    "example:build:configlib": "node bin/perfscale-library-build.mjs examples/configlib/configlib.ts -o examples/configlib/configlib.wasm"
+    "example:build:configlib": "node bin/perfscale-library-build.mjs examples/configlib/configlib.ts -o examples/configlib/configlib.wasm",
+    "example:build:steps": "node bin/perfscale-library-build.mjs --kind steps examples/steps/echo.ts -o examples/steps/echo.wasm",
+    "example:build:exec": "node bin/perfscale-library-build.mjs --kind steps --process examples/steps/exec.ts -o examples/steps/exec.wasm"
   },
   "dependencies": {
     "@bytecodealliance/jco": "^1.35.0",

@@ -21,7 +21,10 @@ capability model; the ABI contract (`perfscale:library@0.3.0`) is
 single source of truth. The same TS package also authors **WASM end-of-run
 reporters** (issue #9) — components rendering the canonical `report@v1`
 document once per run; the reporter ABI (`perfscale:reporter@0.1.0`) is
-[`ts/wit/reporter/reporter.wit`](ts/wit/reporter/reporter.wit).
+[`ts/wit/reporter/reporter.wit`](ts/wit/reporter/reporter.wit). It also
+authors **custom steps** (RFC 009) — actions dispatched as
+`lib/<alias>/<step>`; the step ABI (`perfscale:step@0.1.0`) is
+[`ts/wit/step/step.wit`](ts/wit/step/step.wit).
 
 ## Languages
 
@@ -90,6 +93,28 @@ The SDK also gives you:
   assert.equal(testCall(lib, ctx, "token", []), testCall(lib, ctx, "token", []));
   ```
 
+### Custom steps (RFC 009)
+
+`defineSteps` declares components whose steps run as test actions via
+`use: lib/<alias>/<step>` (alongside the built-in `std/*` actions), including
+one-shot `before:`/`after:` setup steps. A step receives its `with:` block
+and a `StepCtx` (`iterationSeq`/`vuId`/`timeMs` as `bigint`, `stepName`,
+frozen run `settings`), and returns an `ActionOutput`: `success`, `output`
+(stored under the step's `outputs:`, usable in later steps' `check:` and
+`${{ }}` expressions), `logs`, custom `metrics` series (`[a-z0-9_]`), an
+`httpSample`, and `secretOutputPaths` for log masking. Build with
+`perfscale-library-build --kind steps entry.ts -o s.wasm`.
+
+**Security — the `process` gate:** steps that spawn host processes via
+`ctx.exec` need a double opt-in: the component declares
+`capabilities: [process]` AND the run config sets
+`allow_process_actions: true` (plus `allow_library_capabilities: true`); the
+host connects the bounded `host-exec` import (no shell, replacement
+environment, capped timeout/output) only then, and refuses to load the
+component otherwise. Build these with `--kind steps --process`. Details and
+examples: [ts/README.md — Steps](ts/README.md#steps-rfc-009),
+[`ts/examples/steps`](ts/examples/steps).
+
 ### Sandboxing notes for TS authors
 
 - jco (StarlingMonkey) components always import `wasi:filesystem/*` and
@@ -132,7 +157,8 @@ cache, and burned standalone binaries) is covered in the engine's
 ## Layout
 
 ```
-ts/            @perfscale/library-sdk — defineLibrary, Ctx, Prng, testCall,
+ts/            @perfscale/library-sdk — defineLibrary, defineSteps, Ctx,
+               StepCtx, Prng, testCall, testStep,
                perfscale-library-build (jco componentize glue), example
 go/            Go guidance (README) + examples/hello — a working TinyGo
                example component with committed wit-bindgen-go bindings

@@ -1,6 +1,8 @@
-//! TypeScript/JavaScript SDK for authoring perfscale WASM value-generator
-//! libraries (RFC 005). Mirrors `crates/perfscale-library-sdk` in the main
-//! perfscale repo — same semantics, idiomatic TS.
+//! TypeScript/JavaScript SDK for authoring perfscale WASM components:
+//! value-generator libraries (RFC 005), custom steps dispatched as
+//! `lib/<alias>/<step>` (RFC 009, see `step.ts`), and end-of-run reporters
+//! (issue #9, see `reporter.ts`). Mirrors `crates/perfscale-library-sdk` in
+//! the main perfscale repo — same semantics, idiomatic TS.
 //!
 //! Authors define a library with {@link defineLibrary}, build it to a WASM
 //! component with `perfscale-library-build entry.ts -o mylib.wasm` (jco
@@ -111,6 +113,10 @@ const EMPTY_SETTINGS: RunSettings = deepFreeze({
   arrival: null,
   variables: {},
 });
+
+/** The all-null frozen settings snapshot (pre-first-call / 0.1 host default).
+ * @internal */
+export { EMPTY_SETTINGS };
 
 /**
  * Parse the ABI's `settings-json` into a frozen {@link RunSettings}
@@ -404,16 +410,40 @@ export interface ComponentExports {
   call(ctx: WitContext, funcName: string, argsJson: string): string;
 }
 
-function infoJson(def: LibraryDefinition, fallbackName: string): string {
+/**
+ * What {@link __exportLibrary} accepts: a plain library definition, or a
+ * step library's definition (RFC 009 — `functions` optional/`{}` for a
+ * steps-only component, `steps` listed in the manifest). Structurally
+ * compatible with `StepsDefinition` from `step.ts` without a type cycle.
+ */
+export type ExportableDefinition = Omit<LibraryDefinition, "functions"> & {
+  functions?: LibraryDefinition["functions"];
+  /** Exported steps (manifest metadata only — dispatch lives in `step.ts`). */
+  steps?: Record<string, { description?: string; secret?: boolean }>;
+};
+
+function infoJson(def: ExportableDefinition, fallbackName: string): string {
   return JSON.stringify({
     name: (def.name ?? fallbackName).replaceAll("-", "_"),
     version: def.version ?? "0.0.0",
     pure: def.pure ?? true,
-    functions: Object.entries(def.functions).map(([name, f]) => ({
+    functions: Object.entries(def.functions ?? {}).map(([name, f]) => ({
       name,
       description: f.description ?? "",
       secret: f.secret ?? false,
     })),
+    // RFC 009: a step component's single manifest lists steps next to
+    // functions — emitted here exactly once, for both combined and
+    // steps-only components.
+    ...(def.steps !== undefined
+      ? {
+          steps: Object.entries(def.steps).map(([name, s]) => ({
+            name,
+            description: s.description ?? "",
+            secret: s.secret ?? false,
+          })),
+        }
+      : {}),
   });
 }
 
@@ -430,7 +460,7 @@ function infoJson(def: LibraryDefinition, fallbackName: string): string {
  * @internal
  */
 export function __exportLibrary(
-  def: LibraryDefinition,
+  def: ExportableDefinition,
   fallbackName = "library",
 ): ComponentExports {
   // Instance state: one long-lived Ctx per component instance (memo state
@@ -471,7 +501,7 @@ export function __exportLibrary(
       ctx.seed = BigInt(wc.seed);
       ctx.timeMs = BigInt(wc.timeMs);
       ctx.settings = settingsParsed;
-      const f = def.functions[funcName];
+      const f = def.functions?.[funcName];
       if (!f) throw new LibraryError(`unknown function '${funcName}'`);
       return f.call(argv, ctx);
     },
@@ -489,7 +519,7 @@ export function __exportLibrary(
  *
  * @internal
  */
-export function __exportConfigSchema(def: LibraryDefinition): { configSchema(): string } {
+export function __exportConfigSchema(def: ExportableDefinition): { configSchema(): string } {
   const decl = def.configSchema;
   if (!decl) throw new LibraryError("__exportConfigSchema: the library declares no configSchema");
   const json = JSON.stringify({ key: decl.key, schema: decl.schema });
@@ -497,6 +527,24 @@ export function __exportConfigSchema(def: LibraryDefinition): { configSchema(): 
 }
 
 export * from "./report.ts";
+export {
+  defineSteps,
+  StepCtx,
+  StepError,
+  testStep,
+  __exportSteps,
+  type ExecRequest,
+  type ExecResult,
+  type HostExec,
+  type HttpSample,
+  type StepComponentExports,
+  type StepDef,
+  type StepLog,
+  type StepResult,
+  type StepsDefinition,
+  type WitExecRequest,
+  type WitStepContext,
+} from "./step.ts";
 export {
   defineReporter,
   ReporterError,

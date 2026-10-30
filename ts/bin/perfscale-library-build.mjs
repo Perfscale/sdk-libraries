@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// Build a perfscale library entry (TS/JS) into a WASM component.
+// Build a perfscale component entry (TS/JS) into a WASM component.
 //
-//   perfscale-library-build <entry.ts> -o mylib.wasm [--wit <dir>]
+//   perfscale-library-build <entry.ts> -o mylib.wasm [--kind library|reporter|steps] [--process] [--wit <dir>]
 //
 // Uses `jco componentize` (ComponentizeJS embeds a JS engine — that is how
 // TS becomes a component). The entry's default export must be a
-// `defineLibrary({...})` definition; this script generates the thin wrapper
-// that adapts it to the `perfscale:library/library` WIT export.
+// `defineLibrary({...})` / `defineReporter({...})` / `defineSteps({...})`
+// definition (per --kind); this script generates the thin wrapper that
+// adapts it to the corresponding WIT world's exports.
 //
 // WASI features are disabled to match the perfscale engine's fail-closed
 // capability model: `wasi:random` is never provided to guests (draw from
@@ -25,10 +26,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { selectBuild } from "./select-build.mjs";
 
 function usage(code) {
   console.error(
-    "usage: perfscale-library-build <entry.ts|entry.js> -o <out.wasm> [--kind library|reporter] [--wit <wit-dir>] [--jco <path-to-jco>]",
+    "usage: perfscale-library-build <entry.ts|entry.js> -o <out.wasm> [--kind library|reporter|steps] [--process] [--wit <wit-dir>] [--jco <path-to-jco>]",
   );
   process.exit(code);
 }
@@ -39,6 +41,7 @@ let out;
 let witDir;
 let jcoBin;
 let kind = "library";
+let processCapability = false;
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === "-h" || a === "--help") usage(0);
@@ -46,6 +49,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "--wit") witDir = argv[++i];
   else if (a === "--jco") jcoBin = argv[++i];
   else if (a === "--kind") kind = argv[++i];
+  else if (a === "--process") processCapability = true;
   else if (a.startsWith("-")) {
     console.error(`unknown option: ${a}`);
     usage(1);
@@ -53,24 +57,24 @@ for (let i = 0; i < argv.length; i++) {
 }
 const entry = positional[0];
 if (!entry || !out) usage(1);
-if (kind !== "library" && kind !== "reporter") {
-  console.error(`error: --kind must be 'library' or 'reporter', got '${kind}'`);
-  usage(1);
-}
 // Reporters implement `perfscale:reporter@0.1.0` (wit/reporter/reporter.wit):
 // a single `on-report(report-json, config-json)` export plus the host import
-// `emit-file`. Everything else (jco componentize, disabled WASI features) is
-// identical to the library build.
-// A library whose entry declares `configSchema` (issue #10) builds against
+// `emit-file`. Step components (RFC 009, `--kind steps`) implement
+// `perfscale:step@0.1.0` (wit/step/step.wit): the library export (its info()
+// is the single manifest for functions AND steps) plus the `step` export;
+// `--process` selects the `-exec` world that imports host-exec.
+// A library/steps entry declaring `configSchema` (issue #10) builds against
 // the config world, which adds the `config-schema` export.
 const entrySource = readFileSync(entry, "utf8");
-const hasConfigSchema = kind === "library" && /\bconfigSchema\s*:/.test(entrySource);
-const worldName =
-  kind === "reporter"
-    ? "perfscale-reporter"
-    : hasConfigSchema
-      ? "perfscale-library-config"
-      : "perfscale-library";
+const hasConfigSchema = kind !== "reporter" && /\bconfigSchema\s*:/.test(entrySource);
+let build;
+try {
+  build = selectBuild({ kind, process: processCapability, hasConfigSchema });
+} catch (e) {
+  console.error(`error: ${e.message}`);
+  usage(1);
+}
+const worldName = build.worldName;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sdkRoot = path.resolve(here, "..");
@@ -82,16 +86,15 @@ const sdkEntry = existsSync(path.join(sdkRoot, "dist", "index.js"))
   ? path.join(sdkRoot, "dist", "index.js")
   : path.join(sdkRoot, "src", "index.ts");
 
-witDir ??= path.join(sdkRoot, kind === "reporter" ? "wit/reporter" : "wit");
-const witFile = kind === "reporter" ? "reporter.wit" : "library.wit";
-const witPath = path.join(witDir, witFile);
+witDir ??= path.join(sdkRoot, build.witSubdir);
+const witPath = path.join(witDir, build.witFile);
 if (!existsSync(witPath)) {
-  console.error(`error: no ${witFile} under ${witDir} (run scripts/sync-wit.sh)`);
+  console.error(`error: no ${build.witFile} under ${witDir} (run scripts/sync-wit.sh)`);
   process.exit(1);
 }
 
-// Reporter wrappers import the host's `emit-file` as
-// `perfscale:reporter/host@<version>` — componentize-js exposes world
+// Reporter/step wrappers import host functions as
+// `perfscale:<pkg>/<iface>@<version>` — componentize-js exposes world
 // imports as builtin modules under their fully-versioned WIT id, so the
 // version must come from the WIT package line.
 function witPackageVersion(file) {
@@ -149,6 +152,38 @@ export const reporter = __exportReporter(def, emitFile);
   // file: keep it external when rolldown bundles the TS sources.
   bundleConfigPath = path.join(tmp, "bundle.config.mjs");
   writeFileSync(bundleConfigPath, `export default { external: [/^perfscale:/] };\n`);
+} else if (kind === "steps") {
+  // The library export carries the manifest (info() lists functions AND
+  // steps, exactly once); the step export is the RFC 009 dispatch entry.
+  // With --process the wrapper binds the world import host-exec and hands it
+  // to the SDK — the only process channel the component gets.
+  const execImport = build.hostExecImport
+    ? (() => {
+        const version = witPackageVersion(witPath);
+        if (!version) {
+          console.error(`error: could not parse the package version from ${witPath}`);
+          process.exit(1);
+        }
+        return `import { exec } from "${build.hostExecImport}@${version}";\n`;
+      })()
+    : "";
+  wrapperSource = `import def from ${JSON.stringify(entryAbs)};
+import { __exportLibrary, __exportSteps } from ${JSON.stringify(sdkEntry)};
+${execImport}export const library = __exportLibrary(def, ${JSON.stringify(fallbackName)});
+export const step = __exportSteps(def${build.hostExecImport ? ", exec" : ""});
+${hasConfigSchema ? "export const configSchema = __exportConfigSchema(def);\n" : ""}`;
+  if (hasConfigSchema) {
+    wrapperSource = wrapperSource.replace(
+      "__exportLibrary, __exportSteps",
+      "__exportConfigSchema, __exportLibrary, __exportSteps",
+    );
+  }
+  if (build.hostExecImport) {
+    // Same externalization as the reporter's emit-file: the host import is a
+    // component builtin, not a file to bundle.
+    bundleConfigPath = path.join(tmp, "bundle.config.mjs");
+    writeFileSync(bundleConfigPath, `export default { external: [/^perfscale:/] };\n`);
+  }
 } else {
   wrapperSource = hasConfigSchema
     ? `import def from ${JSON.stringify(entryAbs)};
