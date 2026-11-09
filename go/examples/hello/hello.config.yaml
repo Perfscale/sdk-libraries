@@ -1,4 +1,4 @@
 vus: 1
-duration: 1s
+duration: 3s
 allow_file_actions: true
 seed: 42
