@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build the hello perfscale library component with TinyGo.
 #
-# Produces hello.wasm: a component exporting perfscale:library/library@0.1.0
+# Produces hello.wasm: a component exporting perfscale:library/library@0.3.0
 # with no wasi:random import (the engine rejects wasi:random at load time).
 #
 # Requires: tinygo (wasip2), wasm-tools, wasm-opt (binaryen), python3.
@@ -22,7 +22,10 @@ BUILD=.build
 rm -rf "$BUILD"
 mkdir -p "$BUILD"
 
-tinygo build -target=wasip2 -buildmode=c-shared -o "$BUILD/component.wasm" .
+# SDK calls are synchronous: no asyncify scheduler is needed. The conservative
+# collector also stays within the engine's 64 MiB instance cap under sustained
+# calls; the wasip2 default (asyncify + precise GC) traps after a few iterations.
+tinygo build -target=wasip2 -buildmode=c-shared -scheduler=none -gc=conservative -o "$BUILD/component.wasm" .
 python3 tools/patch_component.py extract "$BUILD/component.wasm" "$BUILD/core.wasm"
 wasm-opt "$BUILD/core.wasm" --remove-unused-module-elements -o "$BUILD/core.opt.wasm"
 python3 tools/patch_component.py rename-random "$BUILD/core.opt.wasm" "$BUILD/core.final.wasm"

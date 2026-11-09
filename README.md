@@ -31,7 +31,7 @@ authors **custom steps** (RFC 009) — actions dispatched as
 | Language | Status | Where |
 |---|---|---|
 | **TypeScript / JavaScript** | SDK + build tooling | [`ts/`](ts) (`@perfscale/library-sdk`) |
-| **Go** | Example component (TinyGo + wit-bindgen-go, no SDK yet) | [`go/examples/hello`](go/examples/hello) |
+| **Go** | Stable SDK for ABI 0.3 + TinyGo example | [`go/`](go) (`github.com/Perfscale/sdk-libraries/go`) |
 | **Rust** | Full SDK, lives in the main repo | [`crates/perfscale-library-sdk`](https://github.com/Perfscale/perfscale/tree/main/crates/perfscale-library-sdk) |
 
 ## TypeScript quickstart
@@ -160,8 +160,8 @@ cache, and burned standalone binaries) is covered in the engine's
 ts/            @perfscale/library-sdk — defineLibrary, defineSteps, Ctx,
                StepCtx, Prng, testCall, testStep,
                perfscale-library-build (jco componentize glue), example
-go/            Go guidance (README) + examples/hello — a working TinyGo
-               example component with committed wit-bindgen-go bindings
+go/            Stable Go SDK: Library, Ctx, Prng, Runtime, args helpers,
+               standard/config component exports, host tests, TinyGo example
 ```
 
 ## License

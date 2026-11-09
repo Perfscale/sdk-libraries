@@ -62,7 +62,12 @@ jobs:
           curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz \
             | tar -xz --strip-components=2 -C "$HOME/.local/bin" --wildcards '*/bin/wasm-opt'
           wasm-tools --version && wasm-opt --version
-      # Bindings under internal/gen are committed — no codegen here.
+      # Bindings under go/internal/gen are committed — no codegen here.
+      - name: Test and vet the Go SDK
+        working-directory: go
+        run: go test ./... && go vet ./...
+      - name: Verify the vendored ABI matches the source of truth
+        run: cmp ../../../ts/wit/library.wit wit/deps/perfscale-library/library.wit
       - run: go build ./...
       - name: Componentize the Go example library
         # build.sh re-worlds the component to perfscale:library/library and
@@ -71,7 +76,7 @@ jobs:
         run: ./build.sh
       - name: Assert component shape (export + no wasi:random)
         run: |
-          wasm-tools component wit hello.wasm | grep -q 'export perfscale:library/library@0.1.0'
+          wasm-tools component wit hello.wasm | grep -q 'export perfscale:library/library@0.3.0'
           ! wasm-tools component wit hello.wasm | grep -q 'wasi:random'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -97,7 +102,8 @@ jobs:
           "$GITHUB_WORKSPACE/perfscale" --version
       - name: Run the example through the engine
         working-directory: ts/examples/hello
-        run: "$GITHUB_WORKSPACE/perfscale run -f hello.test.yaml -c hello.config.yaml"
+        run: |
+          "$GITHUB_WORKSPACE/perfscale" run -f hello.test.yaml -c hello.config.yaml
       - name: Assert token expansion
         working-directory: ts/examples/hello
         run: |
@@ -122,7 +128,12 @@ jobs:
           "$GITHUB_WORKSPACE/perfscale" --version
       - name: Run the Go example through the engine
         working-directory: go/examples/hello
-        run: "$GITHUB_WORKSPACE/perfscale run -f hello.test.yaml -c hello.config.yaml"
+        run: |
+          set -o pipefail
+          "$GITHUB_WORKSPACE/perfscale" run -f hello.test.yaml -c hello.config.yaml --quiet | tee go-run.log
+          # A final output file alone is not enough: guest traps used to poison
+          # the instance while later iterations still looked superficially green.
+          grep -q '"errors":0' go-run.log
       - name: Assert token expansion matches the TS example
         working-directory: go/examples/hello
         run: |

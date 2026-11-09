@@ -6,17 +6,19 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// Exports represents the caller-defined exports from "perfscale:library/library@0.1.0".
+// Exports represents the caller-defined exports from "perfscale:library/library@0.3.0".
 var Exports struct {
 	// Info represents the caller-defined, exported function "info".
 	//
 	// Library metadata as JSON:
 	// `{ "name": "...", "version": "...",
-	// "functions": [{ "name", "description", "secret" }],
-	// "pure"?: boolean }`.
-	// `pure` defaults to `false` on the engine side; when `true` it asserts
-	// the library never touches the filesystem or the wall clock, and the
-	// host may waive the capability requirement (providing no preopens).
+	// "pure": false,
+	// "functions": [{ "name", "description", "secret" }] }`.
+	// `pure` (optional, default false) declares the library never touches
+	// the filesystem or the wall clock: the host may then waive the
+	// fs/clock capability requirement even if the component imports those
+	// interfaces (jco/StarlingMonkey toolchains always do) — and provides
+	// no preopens, so actual file access still fails at runtime.
 	//
 	//	info: func() -> string
 	Info func() (result string)
